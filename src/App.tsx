@@ -1,23 +1,30 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  Gamepad2, Settings, Trophy, Music, Film, MessageSquare, Sparkles,
-  Zap, Users, ArrowLeft, Plus, Edit2, Trash2, Save, X, Image,
-  Search, User, Clock, Check, Play, SkipForward,
-  Eye, RotateCcw, Home, Star
+  Gamepad2, Settings, Trophy, Music, Film, MessageSquare,
+  Zap, Users, ArrowLeft, Plus, Edit2, Trash2, Save, X, Upload,
+  Search, User, Clock, Check, Play, Eye, RotateCcw,
+  Home, Star, LogOut, Mic, Video, Image, FileQuestion
 } from 'lucide-react';
 
 // ==================== TYPES ====================
 type ContentType = 'meme-dialogue' | 'song-tune' | 'movie-meme';
 type GameMode = 'individual' | 'team';
-type GameScreen = 'home' | 'admin' | 'setup' | 'lobby' | 'playing' | 'reveal' | 'scoreboard';
+type GameScreen = 'loading' | 'home' | 'admin' | 'setup' | 'lobby' | 'playing' | 'reveal' | 'scoreboard';
+type QuestionType = 'multiple-choice' | 'open-ended';
 
 interface GameContent {
   id: string;
   type: ContentType;
+  questionType: QuestionType;
   question: string;
   answer: string;
-  options: string[];
+  options?: string[];
   imageUrl?: string;
+  imageData?: string;
+  videoUrl?: string;
+  videoData?: string;
+  audioUrl?: string;
+  audioData?: string;
   audioHint?: string;
   difficulty: 'easy' | 'medium' | 'hard';
   points: number;
@@ -32,21 +39,8 @@ interface Player {
   streak: number; bestStreak: number; correctAnswers: number; totalAnswers: number;
 }
 
-// ==================== SAMPLE DATA ====================
-const SAMPLE_CONTENT: GameContent[] = [
-  { id: '1', type: 'meme-dialogue', question: 'What is the famous dialogue from this meme?', answer: 'This is fine', options: ['This is fine', 'Everything is okay', "I'm on fire", 'No worries'], difficulty: 'easy', points: 10 },
-  { id: '2', type: 'meme-dialogue', question: 'Complete the meme: "One does not simply ___"', answer: 'Walk into Mordor', options: ['Walk into Mordor', 'Eat just one chip', 'Win at poker', 'Ignore this meme'], difficulty: 'easy', points: 10 },
-  { id: '3', type: 'song-tune', question: '🎵 Identify this tune: "Dum dum da dum dum, da dum da dum..."', answer: 'Tum Hi Ho (Aashiqui 2)', options: ['Tum Hi Ho (Aashiqui 2)', 'Channa Mereya (Ae Dil)', 'Kal Ho Naa Ho', 'Tujhe Dekha Toh (DDLJ)'], audioHint: 'Slow romantic Bollywood tune from the 2013 blockbuster', difficulty: 'medium', points: 20 },
-  { id: '4', type: 'song-tune', question: '🎵 "Never gonna give you up, never gonna let you down" — What is this internet phenomenon called?', answer: 'Rickrolling', options: ['Rickrolling', 'Trolling', 'Catfishing', 'Dabbing'], audioHint: 'The most famous internet prank song of all time', difficulty: 'easy', points: 10 },
-  { id: '5', type: 'movie-meme', question: 'Which movie is referenced by the meme: "I am Groot"?', answer: 'Guardians of the Galaxy', options: ['Guardians of the Galaxy', 'Avengers: Endgame', 'Thor: Ragnarok', 'Spider-Man'], difficulty: 'easy', points: 10 },
-  { id: '6', type: 'movie-meme', question: 'The "Matrix Red Pill vs Blue Pill" meme references what concept?', answer: 'Truth vs Ignorance / Free Will', options: ['Truth vs Ignorance / Free Will', 'Good vs Evil', 'Love vs Hate', 'Wealth vs Poverty'], difficulty: 'hard', points: 30 },
-  { id: '7', type: 'song-tune', question: '🎵 "Na na na na, na na na na, hey hey hey, goodbye!" — Identify this anthem', answer: 'Na Na Hey Hey Kiss Him Goodbye', options: ['Na Na Hey Hey Kiss Him Goodbye', 'Celebration', 'We Will Rock You', 'Seven Nation Army'], audioHint: 'Classic stadium anthem tune', difficulty: 'medium', points: 20 },
-  { id: '8', type: 'meme-dialogue', question: 'What phrase is associated with the "Stonks" meme?', answer: 'Stonks', options: ['Stonks', 'To the Moon', 'Buy High Sell Low', 'Diamond Hands'], difficulty: 'easy', points: 10 },
-  { id: '9', type: 'movie-meme', question: 'The "Leonardo DiCaprio pointing at TV" meme is from which movie?', answer: 'Once Upon a Time in Hollywood', options: ['Once Upon a Time in Hollywood', 'The Wolf of Wall Street', 'Inception', 'Django Unchained'], difficulty: 'hard', points: 30 },
-  { id: '10', type: 'song-tune', question: '🎵 "Baby Shark doo doo doo..." — What category is this?', answer: "Children's viral hit", options: ["Children's viral hit", 'K-Pop dance track', 'Reggaeton summer hit', 'EDM club banger'], audioHint: 'Super catchy kids song that broke YouTube records', difficulty: 'easy', points: 10 },
-  { id: '11', type: 'meme-dialogue', question: 'The "Distracted Boyfriend" meme represents what?', answer: 'Temptation — Choosing something new over what you already have', options: ['Temptation — Choosing something new over what you already have', 'A guy who is lost', 'Shopping addiction', 'Bad photography skills'], difficulty: 'medium', points: 20 },
-  { id: '12', type: 'movie-meme', question: 'This meme: "I am your father" — Which movie and character?', answer: 'Star Wars - Darth Vader', options: ['Star Wars - Darth Vader', 'The Lion King - Mufasa', 'Harry Potter - Snape', 'Terminator - T-800'], difficulty: 'easy', points: 10 },
-];
+// Start with an empty content library. Admins add all questions/media themselves.
+const SAMPLE_CONTENT: GameContent[] = [];
 
 const TEAM_COLORS = ['#a855f7', '#ec4899', '#3b82f6', '#22c55e', '#f97316', '#06b6d4', '#eab308', '#ef4444'];
 const TEAM_EMOJIS = ['🦁', '🐉', '🦅', '🐺', '🦊', '🐯', '🦈', '🐙'];
@@ -83,9 +77,18 @@ function saveStats(s: any) {
   localStorage.setItem('gv_stats', JSON.stringify(s));
 }
 
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+  });
+}
+
 // ==================== ANIMATED BACKGROUND ====================
 const AnimatedBg: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <div className="relative min-h-screen" style={{ background: '#0a0a1a', color: '#ffffff', fontFamily: 'sans-serif' }}>
+  <div className="relative min-h-screen" style={{ background: '#0a0a1a', color: '#ffffff', fontFamily: 'system-ui, sans-serif', overflow: 'hidden' }}>
     <div style={{
       position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 0,
       background: `
@@ -99,7 +102,6 @@ const AnimatedBg: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   </div>
 );
 
-// ==================== GRADIENT TEXT ====================
 const GradientText: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className = '' }) => (
   <span
     className={className}
@@ -107,56 +109,268 @@ const GradientText: React.FC<{ children: React.ReactNode; className?: string }> 
       background: 'linear-gradient(135deg, #a855f7, #ec4899, #3b82f6)',
       WebkitBackgroundClip: 'text',
       WebkitTextFillColor: 'transparent',
+      backgroundClip: 'text',
     }}
   >
     {children}
   </span>
 );
 
-// ==================== HOME SCREEN ====================
-const HomeScreen: React.FC<{ onNavigate: (s: GameScreen) => void; stats: { total: number; games: number } }> = ({ onNavigate, stats }) => {
-  const emojis = [
-    { e: '🎮', style: { top: '12%', left: '5%', animationDelay: '0s' } },
-    { e: '🎵', style: { top: '25%', right: '10%', animationDelay: '1s' } },
-    { e: '🎬', style: { bottom: '25%', left: '10%', animationDelay: '2s' } },
-    { e: '😂', style: { bottom: '12%', right: '5%', animationDelay: '0.5s' } },
-  ];
+const ConfirmModal: React.FC<{
+  open: boolean;
+  title: string;
+  message: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  destructive?: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}> = ({ open, title, message, confirmLabel = 'Confirm', cancelLabel = 'Cancel', destructive = false, onConfirm, onCancel }) => {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center px-4" style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(12px)' }}>
+      <div className="w-full max-w-sm rounded-2xl p-6 text-center shadow-2xl" style={{ background: 'rgba(18,18,42,0.96)', border: '1px solid rgba(255,255,255,0.12)' }}>
+        <div className="w-14 h-14 rounded-2xl mx-auto mb-4 flex items-center justify-center" style={{ background: destructive ? 'rgba(239,68,68,0.15)' : 'rgba(168,85,247,0.18)' }}>
+          {destructive ? <LogOut className="w-7 h-7 text-red-400" /> : <Check className="w-7 h-7 text-purple-400" />}
+        </div>
+        <h3 className="text-xl font-bold mb-2">{title}</h3>
+        <p className="text-sm text-white/50 mb-6">{message}</p>
+        <div className="grid grid-cols-2 gap-3">
+          <button className="py-3 rounded-xl font-semibold text-white/60" style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.1)' }} onClick={onCancel}>
+            {cancelLabel}
+          </button>
+          <button className="py-3 rounded-xl font-bold text-white" style={{ background: destructive ? 'linear-gradient(135deg, #ef4444, #f97316)' : 'linear-gradient(135deg, #a855f7, #ec4899)' }} onClick={onConfirm}>
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+</div>
+   );
+ };
+
+// ==================== ALERT MODAL ====================
+const AlertModal: React.FC<{
+  open: boolean;
+  title: string;
+  message: string;
+  onOk: () => void;
+}> = ({ open, title, message, onOk }) => {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center px-4" style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(12px)' }}>
+      <div className="w-full max-w-sm rounded-2xl p-6 text-center shadow-2xl" style={{ background: 'rgba(18,18,42,0.96)', border: '1px solid rgba(255,255,255,0.12)' }}>
+        <div className="w-14 h-14 rounded-2xl mx-auto mb-4 flex items-center justify-center" style={{ background: 'rgba(168,85,247,0.18)' }}>
+          <Star className="w-7 h-7 text-purple-400" />
+        </div>
+        <h3 className="text-xl font-bold mb-2">{title}</h3>
+        <p className="text-sm text-white/50 mb-6">{message}</p>
+        <button className="w-full py-3 rounded-xl font-bold text-white" style={{ background: 'linear-gradient(135deg, #a855f7, #ec4899)' }} onClick={onOk}>
+          Got it
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// ==================== LOADING SCREEN ====================
+const LoadingScreen: React.FC<{ onComplete: () => void }> = ({ onComplete }) => {
+  const [progress, setProgress] = useState(0);
+  const [logoBounce, setLogoBounce] = useState(false);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setProgress(p => {
+        if (p >= 100) {
+          clearInterval(timer);
+          setTimeout(onComplete, 500);
+          return 100;
+        }
+        return p + 2;
+      });
+    }, 30);
+
+    const bounceTimer = setInterval(() => {
+      setLogoBounce(b => !b);
+    }, 600);
+
+    return () => {
+      clearInterval(timer);
+      clearInterval(bounceTimer);
+    };
+  }, [onComplete]);
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-6 py-12">
-      {emojis.map((item, i) => (
-        <div key={i} className="absolute text-5xl opacity-10" style={item.style}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: '#0a0a1a' }}>
+      <div style={{
+        position: 'absolute', inset: 0,
+        background: `
+          radial-gradient(ellipse at 50% 50%, rgba(168,85,247,0.2) 0%, transparent 60%),
+          radial-gradient(ellipse at 30% 70%, rgba(236,72,153,0.15) 0%, transparent 50%),
+          #0a0a1a
+        `
+      }} />
+
+      <div className="text-center relative z-10">
+        <div className="mb-8" style={{ transform: logoBounce ? 'scale(1.05)' : 'scale(1)', transition: 'transform 0.6s ease' }}>
+          <div className="relative inline-block">
+            <div className="text-8xl sm:text-9xl font-black mb-2">
+              <span style={{
+                background: 'linear-gradient(135deg, #a855f7, #ec4899)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                backgroundClip: 'text',
+              }}>G</span>
+              <span style={{
+                background: 'linear-gradient(135deg, #ec4899, #3b82f6)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                backgroundClip: 'text',
+              }}>V</span>
+            </div>
+            <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 text-sm text-white/40 tracking-widest">
+              GAMEVERSE
+            </div>
+          </div>
+        </div>
+
+        <div className="w-64 sm:w-80 mx-auto mb-4">
+          <div className="h-2 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.1)' }}>
+            <div
+              className="h-full rounded-full transition-all duration-300"
+              style={{
+                width: `${progress}%`,
+                background: 'linear-gradient(90deg, #a855f7, #ec4899, #3b82f6)',
+                boxShadow: `0 0 20px rgba(168,85,247,${0.3 + (progress / 200)})`,
+              }}
+            />
+          </div>
+          <div className="flex justify-between text-xs text-white/30 mt-2">
+            <span>Loading</span>
+            <span>{Math.round(progress)}%</span>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-center gap-2">
+          {[0, 1, 2].map(i => (
+            <div key={i} className="w-2 h-2 rounded-full"
+              style={{ background: '#a855f7', animation: 'pulse 1s ease infinite', animationDelay: `${i * 0.2}s` }}
+            />
+          ))}
+        </div>
+        <style>{`@keyframes pulse { 0%, 100% { opacity: 0.3; transform: scale(0.8); } 50% { opacity: 1; transform: scale(1.2); } }`}</style>
+      </div>
+    </div>
+  );
+};
+
+// ==================== TYPEWRITER TEXT ====================
+const TypewriterText: React.FC<{ words: string[]; interval: number }> = ({ words, interval }) => {
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [displayedText, setDisplayedText] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const currentWord = words[currentIndex];
+      
+      if (isDeleting) {
+        setDisplayedText(currentWord.substring(0, displayedText.length - 1));
+        if (displayedText.length === 0) {
+          setIsDeleting(false);
+          setCurrentIndex((currentIndex + 1) % words.length);
+        }
+      } else {
+        setDisplayedText(currentWord.substring(0, displayedText.length + 1));
+        if (displayedText.length === currentWord.length) {
+          setTimeout(() => setIsDeleting(true), 1000);
+        }
+      }
+    }, isDeleting ? 100 : 150);
+
+    return () => clearTimeout(timer);
+  }, [displayedText, currentIndex, isDeleting, words, interval]);
+
+  useEffect(() => {
+    const cycleTimer = setTimeout(() => {
+      if (displayedText.length === words[currentIndex].length && !isDeleting) {
+        setTimeout(() => setIsDeleting(true), 1000);
+      }
+    }, interval);
+    return () => clearTimeout(cycleTimer);
+  }, [currentIndex, displayedText, isDeleting, words, interval]);
+
+  return (
+    <span
+      style={{
+        background: 'linear-gradient(135deg, #a855f7, #ec4899)',
+        WebkitBackgroundClip: 'text',
+        WebkitTextFillColor: 'transparent',
+        backgroundClip: 'text',
+        display: 'inline-block',
+        fontFamily: 'monospace',
+      }}
+    >
+      {displayedText}
+      <span style={{ opacity: 0.7, animation: 'blink 1s infinite' }}>|</span>
+    </span>
+  );
+};
+
+// ==================== HOME SCREEN ====================
+const HomeScreen: React.FC<{ onNavigate: (s: GameScreen) => void; stats: { total: number; games: number } }> = ({ onNavigate, stats }) => {
+  const words = ['Game', 'Meme', 'Guess'];
+
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center px-6 py-12 relative">
+      {/* Corner Admin Button */}
+      <button
+        onClick={() => onNavigate('admin')}
+        className="absolute top-6 right-6 p-3 rounded-xl flex items-center gap-2 hover:scale-105 transition-transform z-50 shadow-lg"
+        style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', backdropFilter: 'blur(10px)' }}
+      >
+        <Settings className="w-5 h-5 text-white/70" />
+        <span className="text-sm font-medium text-white/70 hidden sm:block">Admin</span>
+      </button>
+
+      {[
+        { e: '🎮', style: { top: '12%', left: '5%' } },
+        { e: '🎵', style: { top: '25%', right: '10%' } },
+        { e: '🎬', style: { bottom: '25%', left: '10%' } },
+        { e: '😂', style: { bottom: '12%', right: '5%' } },
+        { e: '🏆', style: { top: '15%', left: '15%' } },
+        { e: '⭐', style: { bottom: '20%', right: '15%' } },
+      ].map((item, i) => (
+        <div key={i} className="absolute text-4xl sm:text-5xl opacity-10"
+          style={{ ...item.style, animation: `float 6s ease-in-out infinite`, animationDelay: `${i * 0.5}s` }}>
           {item.e}
         </div>
       ))}
 
       <div className="text-center mb-12">
-        <div className="inline-flex items-center gap-3 mb-4">
-          <div className="relative">
-            <Gamepad2 className="w-16 h-16" style={{ color: '#a855f7' }} />
-            <Sparkles className="w-5 h-5 absolute -top-1 -right-1 text-yellow-400" />
-          </div>
-        </div>
         <h1 className="text-5xl sm:text-7xl font-black mb-3">
-          <GradientText>GameVerse</GradientText>
+          <TypewriterText words={words} interval={2500} />
+          <span style={{
+            background: 'linear-gradient(135deg, #3b82f6, #06b6d4)',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            backgroundClip: 'text',
+            marginLeft: '0.5rem',
+          }}>
+            Verse
+          </span>
         </h1>
         <p className="text-lg text-white/50 max-w-md mx-auto font-light">
           The Ultimate Social Gaming Arena — Host, Play & Dominate!
         </p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 w-full max-w-3xl mb-10">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full max-w-2xl mb-10">
         {[
           { icon: <Gamepad2 className="w-7 h-7" style={{ color: '#a855f7' }} />, title: 'Play Game', desc: 'Start a new game session', action: () => onNavigate('setup') },
-          { icon: <Settings className="w-7 h-7" style={{ color: '#3b82f6' }} />, title: 'Admin Panel', desc: 'Upload & manage content', action: () => onNavigate('admin') },
           { icon: <Trophy className="w-7 h-7" style={{ color: '#22c55e' }} />, title: 'Scoreboard', desc: 'View scores & leaders', action: () => onNavigate('scoreboard') },
         ].map((item, i) => (
-          <div
-            key={i}
-            onClick={item.action}
-            className="rounded-2xl p-6 text-center cursor-pointer hover:-translate-y-1 transition-all duration-300"
-            style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}
-          >
+          <div key={i} onClick={item.action} className="rounded-2xl p-6 text-center cursor-pointer hover:-translate-y-2 transition-all duration-300"
+            style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', backdropFilter: 'blur(10px)' }}>
             <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-3" style={{ background: 'rgba(255,255,255,0.05)' }}>
               {item.icon}
             </div>
@@ -197,6 +411,12 @@ const HomeScreen: React.FC<{ onNavigate: (s: GameScreen) => void; stats: { total
           <span>{stats.games} games played</span>
         </div>
       </div>
+
+      <style>{`
+        @keyframes float { 0%, 100% { transform: translateY(0px) rotate(0deg); } 50% { transform: translateY(-20px) rotate(10deg); } }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+      `}</style>
     </div>
   );
 };
@@ -211,14 +431,23 @@ const AdminScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
   const [form, setForm] = useState({
     type: 'meme-dialogue' as ContentType,
+    questionType: 'multiple-choice' as QuestionType,
     question: '',
     answer: '',
     options: ['', '', '', ''],
-    imageUrl: '',
+    imageData: '' as string,
+    videoData: '' as string,
+    audioData: '' as string,
     audioHint: '',
     difficulty: 'medium' as 'easy' | 'medium' | 'hard',
     points: 20,
   });
+
+  const [uploading, setUploading] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<GameContent | null>(null);
+  const [alertInfo, setAlertInfo] = useState<{ open: boolean; title: string; message: string }>({ open: false, title: '', message: '' });
+
+  const showAlert = (title: string, message: string) => setAlertInfo({ open: true, title, message });
 
   const save = (data: GameContent[]) => {
     setContent(data);
@@ -233,25 +462,43 @@ const AdminScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
   const handleSubmit = () => {
     if (!form.question.trim() || !form.answer.trim()) {
-      alert('Please fill in question and answer!');
-      return;
-    }
-    const cleanOpts = form.options.filter(o => o.trim());
-    if (cleanOpts.length < 2) {
-      alert('At least 2 options required!');
-      return;
-    }
-    if (!cleanOpts.includes(form.answer)) {
-      alert('Answer must be one of the options!');
+      showAlert('Missing fields', 'Please fill in question and answer!');
       return;
     }
 
-    if (editId) {
-      save(content.map(c => c.id === editId ? { ...form, id: editId } as GameContent : c));
-    } else {
-      save([{ ...form, id: Date.now().toString() }, ...content] as GameContent[]);
+    if (form.questionType === 'multiple-choice') {
+      const cleanOpts = form.options.filter(o => o.trim());
+      if (cleanOpts.length < 2) {
+        showAlert('Not enough options', 'At least 2 options required for multiple choice!');
+        return;
+      }
+      if (!cleanOpts.includes(form.answer)) {
+        showAlert('Invalid answer', 'Answer must be one of the options!');
+        return;
+      }
     }
-    setForm({ type: 'meme-dialogue', question: '', answer: '', options: ['', '', '', ''], imageUrl: '', audioHint: '', difficulty: 'medium', points: 20 });
+
+    const newItem: GameContent = {
+      id: editId || Date.now().toString(),
+      type: form.type,
+      questionType: form.questionType,
+      question: form.question,
+      answer: form.answer,
+      options: form.questionType === 'multiple-choice' ? form.options.filter(o => o.trim()) : undefined,
+      imageData: form.imageData || undefined,
+      videoData: form.videoData || undefined,
+      audioData: form.audioData || undefined,
+      audioHint: form.audioHint || undefined,
+      difficulty: form.difficulty,
+      points: form.points,
+    };
+
+    if (editId) {
+      save(content.map(c => c.id === editId ? newItem : c));
+    } else {
+      save([newItem, ...content]);
+    }
+    setForm({ type: 'meme-dialogue', questionType: 'multiple-choice', question: '', answer: '', options: ['', '', '', ''], imageData: '', videoData: '', audioData: '', audioHint: '', difficulty: 'medium', points: 20 });
     setShowForm(false);
     setEditId(null);
   };
@@ -259,12 +506,39 @@ const AdminScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const startEdit = (item: GameContent) => {
     setEditId(item.id);
     setForm({
-      type: item.type, question: item.question, answer: item.answer,
-      options: [...item.options, '', '', '', ''].slice(0, 4),
-      imageUrl: item.imageUrl || '', audioHint: item.audioHint || '',
-      difficulty: item.difficulty, points: item.points,
+      type: item.type,
+      questionType: item.questionType || 'multiple-choice',
+      question: item.question,
+      answer: item.answer,
+      options: item.options ? [...item.options, '', '', '', ''].slice(0, 4) : ['', '', '', ''],
+      imageData: item.imageData || '',
+      videoData: item.videoData || '',
+      audioData: item.audioData || '',
+      audioHint: item.audioHint || '',
+      difficulty: item.difficulty,
+      points: item.points,
     });
     setShowForm(true);
+  };
+
+  const handleFileUpload = async (type: 'image' | 'video' | 'audio', e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const maxSize = type === 'image' ? 5 * 1024 * 1024 : 10 * 1024 * 1024;
+    if (file.size > maxSize) {
+      showAlert('File too large', `Max ${type === 'image' ? '5MB' : '10MB'} allowed.`);
+      return;
+    }
+    setUploading(type);
+    try {
+      const base64 = await fileToBase64(file);
+      if (type === 'image') setForm(f => ({ ...f, imageData: base64 }));
+      if (type === 'video') setForm(f => ({ ...f, videoData: base64 }));
+      if (type === 'audio') setForm(f => ({ ...f, audioData: base64 }));
+    } catch (err) {
+      setAlertInfo({ open: true, title: 'Upload failed', message: 'Could not process the file.' });
+    }
+    setUploading(null);
   };
 
   const diffColor = (d: string) => d === 'easy' ? '#22c55e' : d === 'medium' ? '#eab308' : '#ef4444';
@@ -273,8 +547,21 @@ const AdminScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
   return (
     <div className="min-h-screen px-4 sm:px-6 py-6">
+      <ConfirmModal
+        open={!!deleteTarget}
+        title="Delete content?"
+        message={deleteTarget ? `This will permanently remove: ${deleteTarget.question}` : ''}
+        confirmLabel="Delete"
+        destructive
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (deleteTarget) save(content.filter(c => c.id !== deleteTarget.id));
+          setDeleteTarget(null);
+        }}
+      >
+      </ConfirmModal>
+      <AlertModal open={alertInfo.open} title={alertInfo.title} message={alertInfo.message} onOk={() => setAlertInfo({ open: false, title: '', message: '' })} />
       <div className="max-w-4xl mx-auto">
-        {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
             <button onClick={onBack} className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
@@ -286,15 +573,14 @@ const AdminScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
             </div>
           </div>
           <button
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-white border-0 cursor-pointer"
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-white border-0 cursor-pointer transition-all hover:opacity-90"
             style={{ background: 'linear-gradient(135deg, #a855f7, #ec4899)' }}
-            onClick={() => { setShowForm(true); setEditId(null); setForm({ type: 'meme-dialogue', question: '', answer: '', options: ['', '', '', ''], imageUrl: '', audioHint: '', difficulty: 'medium', points: 20 }); }}
+            onClick={() => { setShowForm(true); setEditId(null); setForm({ type: 'meme-dialogue', questionType: 'multiple-choice', question: '', answer: '', options: ['', '', '', ''], imageData: '', videoData: '', audioData: '', audioHint: '', difficulty: 'medium', points: 20 }); }}
           >
             <Plus className="w-5 h-5" /> Add Content
           </button>
         </div>
 
-        {/* Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
           {[
             { n: content.length, label: 'Total', color: '#a855f7' },
@@ -309,7 +595,6 @@ const AdminScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
           ))}
         </div>
 
-        {/* Form */}
         {showForm && (
           <div className="rounded-2xl p-6 mb-6" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
             <div className="flex items-center justify-between mb-4">
@@ -319,29 +604,34 @@ const AdminScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
               </button>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
               <div>
                 <label className="text-sm text-white/60 mb-1 block">Type</label>
                 <select className="w-full rounded-xl px-4 py-3 text-white border-0 outline-none"
                   style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}
-                  value={form.type}
-                  onChange={e => setForm({ ...form, type: e.target.value as ContentType })}
-                >
+                  value={form.type} onChange={e => setForm({ ...form, type: e.target.value as ContentType })}>
                   <option value="meme-dialogue" style={{ background: '#1a1a2e' }}>💬 Meme Dialogue</option>
                   <option value="song-tune" style={{ background: '#1a1a2e' }}>🎵 Song Tune</option>
                   <option value="movie-meme" style={{ background: '#1a1a2e' }}>🎬 Movie Meme</option>
                 </select>
               </div>
               <div>
+                <label className="text-sm text-white/60 mb-1 block">Question Type</label>
+                <select className="w-full rounded-xl px-4 py-3 text-white border-0 outline-none"
+                  style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}
+                  value={form.questionType} onChange={e => setForm({ ...form, questionType: e.target.value as QuestionType })}>
+                  <option value="multiple-choice" style={{ background: '#1a1a2e' }}>📋 Multiple Choice</option>
+                  <option value="open-ended" style={{ background: '#1a1a2e' }}>✍️ Open Ended</option>
+                </select>
+              </div>
+              <div>
                 <label className="text-sm text-white/60 mb-1 block">Difficulty</label>
                 <select className="w-full rounded-xl px-4 py-3 text-white border-0 outline-none"
                   style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}
-                  value={form.difficulty}
-                  onChange={e => {
+                  value={form.difficulty} onChange={e => {
                     const d = e.target.value as 'easy' | 'medium' | 'hard';
                     setForm({ ...form, difficulty: d, points: d === 'easy' ? 10 : d === 'medium' ? 20 : 30 });
-                  }}
-                >
+                  }}>
                   <option value="easy" style={{ background: '#1a1a2e' }}>😊 Easy (10 pts)</option>
                   <option value="medium" style={{ background: '#1a1a2e' }}>🤔 Medium (20 pts)</option>
                   <option value="hard" style={{ background: '#1a1a2e' }}>🔥 Hard (30 pts)</option>
@@ -353,78 +643,105 @@ const AdminScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
               <label className="text-sm text-white/60 mb-1 block">Question</label>
               <textarea className="w-full rounded-xl px-4 py-3 text-white outline-none" rows={2}
                 style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}
-                placeholder="Enter your question..."
-                value={form.question}
-                onChange={e => setForm({ ...form, question: e.target.value })}
-              />
+                placeholder="Enter your question..." value={form.question} onChange={e => setForm({ ...form, question: e.target.value })} />
             </div>
 
             <div className="mb-4">
               <label className="text-sm text-white/60 mb-1 block">Correct Answer</label>
               <input className="w-full rounded-xl px-4 py-3 text-white outline-none"
                 style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}
-                placeholder="The correct answer"
-                value={form.answer}
-                onChange={e => setForm({ ...form, answer: e.target.value })}
-              />
+                placeholder="The correct answer" value={form.answer} onChange={e => setForm({ ...form, answer: e.target.value })} />
             </div>
 
-            <div className="mb-4">
-              <label className="text-sm text-white/60 mb-1 block">Options (include the correct answer)</label>
-              {form.options.map((opt, i) => (
-                <div key={i} className="flex items-center gap-2 mb-2">
-                  <span className="text-xs text-white/30 w-5">{i + 1}.</span>
-                  <input className="flex-1 rounded-xl px-4 py-2.5 text-white outline-none text-sm"
-                    style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}
-                    placeholder={`Option ${i + 1}`}
-                    value={opt}
-                    onChange={e => {
-                      const opts = [...form.options];
-                      opts[i] = e.target.value;
-                      setForm({ ...form, options: opts });
-                    }}
-                  />
-                  <button
-                    className={`text-xs px-3 py-1.5 rounded-lg transition-all ${form.answer === opt ? 'text-green-400 font-bold' : 'text-white/30'}`}
-                    style={{ background: form.answer === opt ? 'rgba(34,197,94,0.15)' : 'rgba(255,255,255,0.05)' }}
-                    onClick={() => setForm({ ...form, answer: opt })}
-                  >
-                    {form.answer === opt ? '✓ Answer' : 'Set Answer'}
-                  </button>
-                </div>
-              ))}
-            </div>
-
-            {form.type !== 'song-tune' && (
+            {form.questionType === 'multiple-choice' && (
               <div className="mb-4">
-                <label className="text-sm text-white/60 mb-1 block flex items-center gap-2"><Image className="w-4 h-4" /> Image URL (optional)</label>
-                <input className="w-full rounded-xl px-4 py-3 text-white outline-none text-sm"
-                  style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}
-                  placeholder="https://..."
-                  value={form.imageUrl || ''}
-                  onChange={e => setForm({ ...form, imageUrl: e.target.value })}
-                />
+                <label className="text-sm text-white/60 mb-1 block">Options (include the correct answer)</label>
+                {form.options.map((opt, i) => (
+                  <div key={i} className="flex items-center gap-2 mb-2">
+                    <span className="text-xs text-white/30 w-5">{i + 1}.</span>
+                    <input className="flex-1 rounded-xl px-4 py-2.5 text-white outline-none text-sm"
+                      style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}
+                      placeholder={`Option ${i + 1}`} value={opt} onChange={e => {
+                        const opts = [...form.options];
+                        opts[i] = e.target.value;
+                        setForm({ ...form, options: opts });
+                      }} />
+                    <button className={`text-xs px-3 py-1.5 rounded-lg transition-all ${form.answer === opt ? 'text-green-400 font-bold' : 'text-white/30'}`}
+                      style={{ background: form.answer === opt ? 'rgba(34,197,94,0.15)' : 'rgba(255,255,255,0.05)' }}
+                      onClick={() => setForm({ ...form, answer: opt })}>
+                      {form.answer === opt ? '✓ Answer' : 'Set Answer'}
+                    </button>
+                  </div>
+                ))}
               </div>
             )}
 
+            <div className="mb-4">
+              <label className="text-sm text-white/60 mb-2 block">Upload Media (Optional)</label>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="rounded-xl p-4 text-center" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                  <Image className="w-6 h-6 mx-auto mb-2" style={{ color: '#a855f7' }} />
+                  <p className="text-xs text-white/40 mb-2">Image (max 5MB)</p>
+                  <label className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-xs cursor-pointer" style={{ background: 'rgba(168,85,247,0.15)', color: '#a855f7' }}>
+                    <Upload className="w-3 h-3" /> {form.imageData ? 'Replace' : 'Upload'}
+                    <input type="file" accept="image/*" onChange={e => handleFileUpload('image', e)} className="hidden" />
+                  </label>
+                  {form.imageData && (
+                    <div className="mt-2">
+                      <img src={form.imageData} alt="preview" className="w-full h-20 object-cover rounded-lg" />
+                      <button onClick={() => setForm(f => ({ ...f, imageData: '' }))} className="text-xs text-red-400 mt-1">Remove</button>
+                    </div>
+                  )}
+                </div>
+
+                <div className="rounded-xl p-4 text-center" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                  <Video className="w-6 h-6 mx-auto mb-2" style={{ color: '#ec4899' }} />
+                  <p className="text-xs text-white/40 mb-2">Video (max 10MB)</p>
+                  <label className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-xs cursor-pointer" style={{ background: 'rgba(236,72,153,0.15)', color: '#ec4899' }}>
+                    <Upload className="w-3 h-3" /> {form.videoData ? 'Replace' : 'Upload'}
+                    <input type="file" accept="video/*" onChange={e => handleFileUpload('video', e)} className="hidden" />
+                  </label>
+                  {form.videoData && (
+                    <div className="mt-2">
+                      <video src={form.videoData} className="w-full h-20 object-cover rounded-lg" />
+                      <button onClick={() => setForm(f => ({ ...f, videoData: '' }))} className="text-xs text-red-400 mt-1">Remove</button>
+                    </div>
+                  )}
+                </div>
+
+                <div className="rounded-xl p-4 text-center" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                  <Mic className="w-6 h-6 mx-auto mb-2" style={{ color: '#06b6d4' }} />
+                  <p className="text-xs text-white/40 mb-2">Audio (max 10MB)</p>
+                  <label className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-xs cursor-pointer" style={{ background: 'rgba(6,182,212,0.15)', color: '#06b6d4' }}>
+                    <Upload className="w-3 h-3" /> {form.audioData ? 'Replace' : 'Upload'}
+                    <input type="file" accept="audio/*" onChange={e => handleFileUpload('audio', e)} className="hidden" />
+                  </label>
+                  {form.audioData && (
+                    <div className="mt-2">
+                      <audio src={form.audioData} controls className="w-full" />
+                      <button onClick={() => setForm(f => ({ ...f, audioData: '' }))} className="text-xs text-red-400 mt-1">Remove</button>
+                    </div>
+                  )}
+                </div>
+              </div>
+              {uploading && <p className="text-xs text-white/40 mt-2 text-center">Uploading {uploading}... Please wait</p>}
+            </div>
+
             {form.type === 'song-tune' && (
               <div className="mb-4">
-                <label className="text-sm text-white/60 mb-1 block flex items-center gap-2"><Music className="w-4 h-4" /> Audio Hint</label>
+                <label className="text-sm text-white/60 mb-1 block flex items-center gap-2"><Music className="w-4 h-4" /> Audio Hint / Lyrics</label>
                 <textarea className="w-full rounded-xl px-4 py-3 text-white outline-none" rows={2}
                   style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}
-                  placeholder="Describe the tune..."
-                  value={form.audioHint || ''}
-                  onChange={e => setForm({ ...form, audioHint: e.target.value })}
-                />
+                  placeholder="Describe the tune or provide lyrics..." value={form.audioHint || ''} onChange={e => setForm({ ...form, audioHint: e.target.value })} />
               </div>
             )}
 
             <div className="flex gap-3 justify-end">
-              <button className="px-5 py-2.5 rounded-xl font-semibold cursor-pointer" style={{ background: 'rgba(255,255,255,0.08)', color: 'white' }}
+              <button className="px-5 py-2.5 rounded-xl font-semibold cursor-pointer transition-all hover:bg-white/10" style={{ background: 'rgba(255,255,255,0.08)', color: 'white' }}
                 onClick={() => { setShowForm(false); setEditId(null); }}>
                 Cancel
               </button>
-              <button className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-white cursor-pointer"
+              <button className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-white cursor-pointer transition-all hover:opacity-90"
                 style={{ background: 'linear-gradient(135deg, #a855f7, #ec4899)' }}
                 onClick={handleSubmit}>
                 <Save className="w-4 h-4" /> {editId ? 'Update' : 'Save'}
@@ -433,16 +750,12 @@ const AdminScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
           </div>
         )}
 
-        {/* Search / Filter */}
         <div className="flex flex-col sm:flex-row gap-3 mb-4">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
             <input className="w-full rounded-xl pl-10 pr-4 py-3 text-white outline-none text-sm"
               style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}
-              placeholder="Search..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-            />
+              placeholder="Search..." value={search} onChange={e => setSearch(e.target.value)} />
           </div>
           <div className="flex gap-2">
             {[
@@ -451,22 +764,19 @@ const AdminScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
               { key: 'song-tune', label: '🎵 Songs' },
               { key: 'movie-meme', label: '🎬 Movies' },
             ].map(f => (
-              <button key={f.key}
-                className="px-3 py-2 rounded-lg text-sm font-medium transition-all"
+              <button key={f.key} className="px-3 py-2 rounded-lg text-sm font-medium transition-all"
                 style={{
                   background: filter === f.key ? 'rgba(168,85,247,0.2)' : 'rgba(255,255,255,0.05)',
                   border: filter === f.key ? '1px solid rgba(168,85,247,0.4)' : '1px solid rgba(255,255,255,0.08)',
                   color: filter === f.key ? 'white' : 'rgba(255,255,255,0.4)',
                 }}
-                onClick={() => setFilter(f.key)}
-              >
+                onClick={() => setFilter(f.key)}>
                 {f.label}
               </button>
             ))}
           </div>
         </div>
 
-        {/* Content List */}
         <div className="space-y-3">
           {filtered.length === 0 ? (
             <div className="rounded-2xl p-12 text-center" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
@@ -475,9 +785,7 @@ const AdminScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
           ) : filtered.map(item => (
             <div key={item.id} className="rounded-2xl p-4 flex items-start gap-4" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
               <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 text-lg"
-                style={{
-                  background: item.type === 'meme-dialogue' ? 'rgba(168,85,247,0.15)' : item.type === 'song-tune' ? 'rgba(236,72,153,0.15)' : 'rgba(6,182,212,0.15)',
-                }}>
+                style={{ background: item.type === 'meme-dialogue' ? 'rgba(168,85,247,0.15)' : item.type === 'song-tune' ? 'rgba(236,72,153,0.15)' : 'rgba(6,182,212,0.15)' }}>
                 {typeEmoji(item.type)}
               </div>
               <div className="flex-1 min-w-0">
@@ -491,15 +799,23 @@ const AdminScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                   <span className="text-xs px-2 py-0.5 rounded-full font-semibold" style={{ background: 'rgba(234,179,8,0.15)', color: '#eab308' }}>
                     {item.points} pts
                   </span>
+                  <span className="text-xs px-2 py-0.5 rounded-full font-semibold" style={{ background: item.questionType === 'multiple-choice' ? 'rgba(59,130,246,0.15)' : 'rgba(34,197,94,0.15)', color: item.questionType === 'multiple-choice' ? '#3b82f6' : '#22c55e' }}>
+                    {item.questionType === 'multiple-choice' ? '📋 MC' : '✍️ Open'}
+                  </span>
                 </div>
                 <p className="text-sm font-medium truncate">{item.question}</p>
                 <p className="text-xs text-white/30 mt-1">Answer: <span style={{ color: '#22c55e' }}>{item.answer}</span></p>
+                <div className="flex items-center gap-2 mt-2">
+                  {item.imageData && <span className="text-xs px-2 py-0.5 rounded bg-purple-500/20 text-purple-400">🖼️ Image</span>}
+                  {item.videoData && <span className="text-xs px-2 py-0.5 rounded bg-pink-500/20 text-pink-400">🎬 Video</span>}
+                  {item.audioData && <span className="text-xs px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-400">🎵 Audio</span>}
+                </div>
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
-                <button onClick={() => startEdit(item)} className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors" style={{ background: 'rgba(255,255,255,0.05)' }}>
+                <button onClick={() => startEdit(item)} className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors hover:bg-white/10" style={{ background: 'rgba(255,255,255,0.05)' }}>
                   <Edit2 className="w-4 h-4 text-white/40" />
                 </button>
-                <button onClick={() => { if (confirm('Delete?')) save(content.filter(c => c.id !== item.id)); }} className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors" style={{ background: 'rgba(239,68,68,0.1)' }}>
+                <button onClick={() => setDeleteTarget(item)} className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors hover:bg-red-500/20" style={{ background: 'rgba(239,68,68,0.1)' }}>
                   <Trash2 className="w-4 h-4 text-red-400" />
                 </button>
               </div>
@@ -519,12 +835,18 @@ const GameSetup: React.FC<{ onBack: () => void; onStart: (settings: any) => void
   const [rounds, setRounds] = useState(5);
   const [timePerQ, setTimePerQ] = useState(30);
   const [categories, setCategories] = useState<ContentType[]>(['meme-dialogue', 'song-tune', 'movie-meme']);
+  const [questionTypes, setQuestionTypes] = useState<QuestionType[]>(['multiple-choice', 'open-ended']);
   const [newTeamName, setNewTeamName] = useState('');
   const [newPlayerName, setNewPlayerName] = useState('');
 
   const toggleCat = (t: ContentType) => {
     if (categories.includes(t) && categories.length <= 1) return;
     setCategories(prev => prev.includes(t) ? prev.filter(c => c !== t) : [...prev, t]);
+  };
+
+  const toggleQType = (t: QuestionType) => {
+    if (questionTypes.includes(t) && questionTypes.length <= 1) return;
+    setQuestionTypes(prev => prev.includes(t) ? prev.filter(q => q !== t) : [...prev, t]);
   };
 
   const addTeam = () => {
@@ -547,7 +869,11 @@ const GameSetup: React.FC<{ onBack: () => void; onStart: (settings: any) => void
   };
 
   const handleStart = () => {
-    onStart({ mode, teams, players, rounds, timePerQ, categories });
+    let finalPlayers = [...players];
+    if (mode === 'individual' && finalPlayers.length === 0) {
+      finalPlayers = [{ id: 'anon', name: 'Group Score', score: 0, streak: 0, bestStreak: 0, correctAnswers: 0, totalAnswers: 0 }];
+    }
+    onStart({ mode, teams, players: finalPlayers, rounds, timePerQ, categories, questionTypes });
   };
 
   return (
@@ -563,7 +889,6 @@ const GameSetup: React.FC<{ onBack: () => void; onStart: (settings: any) => void
           </div>
         </div>
 
-        {/* Game Mode */}
         <div className="rounded-2xl p-6 mb-6" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
           <h2 className="text-lg font-bold mb-4 flex items-center gap-2"><Gamepad2 className="w-5 h-5" style={{ color: '#a855f7' }} /> Game Mode</h2>
           <div className="grid grid-cols-2 gap-3">
@@ -571,14 +896,12 @@ const GameSetup: React.FC<{ onBack: () => void; onStart: (settings: any) => void
               { m: 'individual' as GameMode, icon: <User className="w-8 h-8" />, label: 'Individual', desc: 'Everyone plays solo', color: '#a855f7' },
               { m: 'team' as GameMode, icon: <Users className="w-8 h-8" />, label: 'Team Play', desc: 'Compete as teams', color: '#ec4899' },
             ].map(item => (
-              <button key={item.m}
-                className="p-4 rounded-xl border-2 flex flex-col items-center gap-2 transition-all"
+              <button key={item.m} className="p-4 rounded-xl border-2 flex flex-col items-center gap-2 transition-all"
                 style={{
                   borderColor: mode === item.m ? item.color : 'rgba(255,255,255,0.1)',
                   background: mode === item.m ? `${item.color}15` : 'transparent',
                 }}
-                onClick={() => setMode(item.m)}
-              >
+                onClick={() => setMode(item.m)}>
                 <div style={{ color: mode === item.m ? item.color : 'rgba(255,255,255,0.3)' }}>{item.icon}</div>
                 <span className="font-semibold">{item.label}</span>
                 <span className="text-xs text-white/40">{item.desc}</span>
@@ -587,7 +910,6 @@ const GameSetup: React.FC<{ onBack: () => void; onStart: (settings: any) => void
           </div>
         </div>
 
-        {/* Categories */}
         <div className="rounded-2xl p-6 mb-6" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
           <h2 className="text-lg font-bold mb-4 flex items-center gap-2"><MessageSquare className="w-5 h-5" style={{ color: '#06b6d4' }} /> Categories</h2>
           <div className="grid grid-cols-3 gap-3">
@@ -596,23 +918,42 @@ const GameSetup: React.FC<{ onBack: () => void; onStart: (settings: any) => void
               { type: 'song-tune' as ContentType, emoji: '🎵', label: 'Song Tunes', color: '#ec4899' },
               { type: 'movie-meme' as ContentType, emoji: '🎬', label: 'Movie Memes', color: '#06b6d4' },
             ].map(cat => (
-              <button key={cat.type}
-                className="p-4 rounded-xl border-2 flex flex-col items-center gap-2 relative transition-all"
+              <button key={cat.type} className="p-4 rounded-xl border-2 flex flex-col items-center gap-2 relative transition-all"
                 style={{
                   borderColor: categories.includes(cat.type) ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.05)',
                   background: categories.includes(cat.type) ? 'rgba(255,255,255,0.1)' : 'transparent',
                 }}
-                onClick={() => toggleCat(cat.type)}
-              >
+                onClick={() => toggleCat(cat.type)}>
                 {categories.includes(cat.type) && <Check className="w-4 h-4 absolute top-2 right-2" style={{ color: '#22c55e' }} />}
                 <span className="text-2xl">{cat.emoji}</span>
-                <span className="font-semibold text-sm">{cat.label}</span>
+                <span className="font-semibold text-sm text-center">{cat.label}</span>
               </button>
             ))}
           </div>
         </div>
 
-        {/* Settings */}
+        <div className="rounded-2xl p-6 mb-6" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
+          <h2 className="text-lg font-bold mb-4 flex items-center gap-2"><FileQuestion className="w-5 h-5" style={{ color: '#22c55e' }} /> Question Types</h2>
+          <div className="grid grid-cols-2 gap-3">
+            {[
+              { type: 'multiple-choice' as QuestionType, emoji: '📋', label: 'Multiple Choice', desc: 'Select from options', color: '#3b82f6' },
+              { type: 'open-ended' as QuestionType, emoji: '✍️', label: 'Open Ended', desc: 'Host verifies answer', color: '#22c55e' },
+            ].map(item => (
+              <button key={item.type} className="p-4 rounded-xl border-2 flex flex-col items-center gap-2 relative transition-all"
+                style={{
+                  borderColor: questionTypes.includes(item.type) ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.05)',
+                  background: questionTypes.includes(item.type) ? 'rgba(255,255,255,0.1)' : 'transparent',
+                }}
+                onClick={() => toggleQType(item.type)}>
+                {questionTypes.includes(item.type) && <Check className="w-4 h-4 absolute top-2 right-2" style={{ color: '#22c55e' }} />}
+                <span className="text-2xl">{item.emoji}</span>
+                <span className="font-semibold text-sm">{item.label}</span>
+                <span className="text-xs text-white/40">{item.desc}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div className="rounded-2xl p-6 mb-6" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
           <h2 className="text-lg font-bold mb-4 flex items-center gap-2"><Clock className="w-5 h-5" style={{ color: '#22c55e' }} /> Settings</h2>
           <div className="space-y-5">
@@ -629,16 +970,13 @@ const GameSetup: React.FC<{ onBack: () => void; onStart: (settings: any) => void
           </div>
         </div>
 
-        {/* Teams or Players */}
         {mode === 'team' ? (
           <div className="rounded-2xl p-6 mb-6" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
             <h2 className="text-lg font-bold mb-4 flex items-center gap-2"><Users className="w-5 h-5" style={{ color: '#ec4899' }} /> Teams</h2>
             <div className="flex gap-2 mb-4">
               <input className="flex-1 rounded-xl px-4 py-3 text-white outline-none text-sm"
                 style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}
-                placeholder="Team name..." value={newTeamName} onChange={e => setNewTeamName(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && addTeam()}
-              />
+                placeholder="Team name..." value={newTeamName} onChange={e => setNewTeamName(e.target.value)} onKeyDown={e => e.key === 'Enter' && addTeam()} />
               <button className="px-4 rounded-xl text-white flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #a855f7, #ec4899)' }} onClick={addTeam}>
                 <Plus className="w-5 h-5" />
               </button>
@@ -663,9 +1001,7 @@ const GameSetup: React.FC<{ onBack: () => void; onStart: (settings: any) => void
             <div className="flex gap-2 mb-4">
               <input className="flex-1 rounded-xl px-4 py-3 text-white outline-none text-sm"
                 style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}
-                placeholder="Player name..." value={newPlayerName} onChange={e => setNewPlayerName(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && addPlayer()}
-              />
+                placeholder="Player name..." value={newPlayerName} onChange={e => setNewPlayerName(e.target.value)} onKeyDown={e => e.key === 'Enter' && addPlayer()} />
               <button className="px-4 rounded-xl text-white flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #a855f7, #ec4899)' }} onClick={addPlayer}>
                 <Plus className="w-5 h-5" />
               </button>
@@ -680,21 +1016,16 @@ const GameSetup: React.FC<{ onBack: () => void; onStart: (settings: any) => void
                   </button>
                 </div>
               ))}
-              {players.length === 0 && <p className="text-white/30 text-sm text-center py-4">No players added — scores tracked anonymously</p>}
+              {players.length === 0 && <p className="text-white/30 text-sm text-center py-4">If none added, a single generic Group Score will be tracked.</p>}
             </div>
           </div>
         )}
 
         <button
           className="w-full py-4 rounded-xl text-lg font-bold text-white flex items-center justify-center gap-3 transition-all active:scale-[0.98]"
-          style={{
-            background: 'linear-gradient(135deg, #a855f7, #ec4899)',
-            boxShadow: '0 8px 25px rgba(168,85,247,0.3)',
-          }}
-          onClick={handleStart}
-        >
-          <Gamepad2 className="w-6 h-6" />
-          {mode === 'team' ? 'Start Team Battle' : 'Start Game'}
+          style={{ background: 'linear-gradient(135deg, #a855f7, #ec4899)', boxShadow: '0 8px 25px rgba(168,85,247,0.3)' }}
+          onClick={handleStart}>
+          <Gamepad2 className="w-6 h-6" /> {mode === 'team' ? 'Start Team Battle' : 'Start Game'}
         </button>
       </div>
     </div>
@@ -705,9 +1036,7 @@ const GameSetup: React.FC<{ onBack: () => void; onStart: (settings: any) => void
 const GameLobby: React.FC<{ settings: any; onStart: () => void; onBack: () => void }> = ({ settings, onStart, onBack }) => {
   const [countdown, setCountdown] = useState<number | null>(null);
 
-  const handleStart = () => {
-    setCountdown(3);
-  };
+  const handleStart = () => setCountdown(3);
 
   useEffect(() => {
     if (countdown === null) return;
@@ -720,7 +1049,7 @@ const GameLobby: React.FC<{ settings: any; onStart: () => void; onBack: () => vo
     <div className="min-h-screen flex items-center justify-center px-4">
       {countdown !== null && (
         <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(10px)' }}>
-          <div style={{ fontSize: '10rem', fontWeight: 900, background: 'linear-gradient(135deg, #a855f7, #ec4899, #3b82f6)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+          <div style={{ fontSize: '10rem', fontWeight: 900, background: 'linear-gradient(135deg, #a855f7, #ec4899, #3b82f6)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
             {countdown}
           </div>
         </div>
@@ -750,35 +1079,20 @@ const GameLobby: React.FC<{ settings: any; onStart: () => void; onBack: () => vo
           ) : (
             <>
               <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><User className="w-5 h-5" style={{ color: '#3b82f6' }} /> Players</h3>
-              {settings.players.length > 0 ? (
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  {settings.players.map((p: Player) => (
-                    <div key={p.id} className="p-3 rounded-xl flex items-center gap-2" style={{ background: 'rgba(255,255,255,0.05)' }}>
-                      <span className="text-xl">👤</span>
-                      <span className="font-medium text-sm">{p.name}</span>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-white/40 text-sm text-center py-4">Playing anonymously — scores tracked</p>
-              )}
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {settings.players.map((p: Player) => (
+                  <div key={p.id} className="p-3 rounded-xl flex items-center gap-2" style={{ background: 'rgba(255,255,255,0.05)' }}>
+                    <span className="text-xl">👤</span>
+                    <span className="font-medium text-sm">{p.name}</span>
+                  </div>
+                ))}
+              </div>
             </>
           )}
         </div>
 
-        <div className="flex items-center justify-center gap-3 mb-8">
-          {settings.categories.map((t: ContentType) => (
-            <div key={t} className="px-3 py-1.5 rounded-full text-xs" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
-              {t === 'meme-dialogue' ? '💬 Memes' : t === 'song-tune' ? '🎵 Songs' : '🎬 Movies'}
-            </div>
-          ))}
-        </div>
-
-        <button
-          className="w-full py-4 rounded-xl text-lg font-bold text-white flex items-center justify-center gap-3 transition-all active:scale-[0.98]"
-          style={{ background: 'linear-gradient(135deg, #a855f7, #ec4899)', boxShadow: '0 8px 25px rgba(168,85,247,0.3)' }}
-          onClick={handleStart}
-        >
+        <button className="w-full py-4 rounded-xl text-lg font-bold text-white flex items-center justify-center gap-3 transition-all active:scale-[0.98]"
+          style={{ background: 'linear-gradient(135deg, #a855f7, #ec4899)', boxShadow: '0 8px 25px rgba(168,85,247,0.3)' }} onClick={handleStart}>
           <Play className="w-6 h-6" /> {countdown !== null ? 'Starting...' : 'Start Game!'}
         </button>
 
@@ -796,25 +1110,20 @@ const GamePlay: React.FC<{
   roundNumber: number;
   totalRounds: number;
   timePerQ: number;
-  onAnswer: (answer: string) => void;
   onReveal: () => void;
-  onNext: () => void;
-  onEnd: () => void;
-  scores: { players: Player[]; teams: Team[]; mode: GameMode };
-}> = ({ question, roundNumber, totalRounds, timePerQ, onAnswer, onReveal, onNext, onEnd }) => {
+  onExit: () => void;
+}> = ({ question, roundNumber, totalRounds, timePerQ, onReveal, onExit }) => {
   const [timeLeft, setTimeLeft] = useState(timePerQ);
   const [hasAnswered, setHasAnswered] = useState(false);
   const [showHint, setShowHint] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Reset per question
   useEffect(() => {
     setHasAnswered(false);
     setTimeLeft(timePerQ);
     setShowHint(false);
   }, [question.id, timePerQ]);
 
-  // Timer
   useEffect(() => {
     if (hasAnswered) return;
     if (timeLeft <= 0) {
@@ -822,18 +1131,9 @@ const GamePlay: React.FC<{
       onReveal();
       return;
     }
-    timerRef.current = setInterval(() => {
-      setTimeLeft(t => t - 1);
-    }, 1000);
+    timerRef.current = setInterval(() => setTimeLeft(t => t - 1), 1000);
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [timeLeft, hasAnswered, onReveal]);
-
-  const handleAnswer = (opt: string) => {
-    if (hasAnswered) return;
-    setHasAnswered(true);
-    onAnswer(opt);
-    setTimeout(() => onReveal(), 500);
-  };
 
   const progress = ((roundNumber - 1) / totalRounds) * 100;
   const timerPct = (timeLeft / timePerQ) * 100;
@@ -843,11 +1143,23 @@ const GamePlay: React.FC<{
 
   const typeEmoji = (t: string) => t === 'meme-dialogue' ? '💬' : t === 'song-tune' ? '🎵' : '🎬';
   const typeLabel = (t: string) => t === 'meme-dialogue' ? 'Meme Dialogue' : t === 'song-tune' ? 'Song Tune' : 'Movie Meme';
+  const isMC = question.questionType === 'multiple-choice';
+
+  const handleRevealClick = () => {
+    if (hasAnswered) return;
+    setHasAnswered(true);
+    onReveal();
+  };
+
+  const handleMCOptionClick = () => {
+    if (hasAnswered) return;
+    setHasAnswered(true);
+    setTimeout(() => onReveal(), 400); // slight delay just for visual feedback
+  };
 
   return (
     <div className="min-h-screen flex flex-col px-4 py-4">
-      <div className="max-w-2xl w-full mx-auto">
-        {/* Top Bar */}
+      <div className="max-w-2xl w-full mx-auto relative">
         <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-xs px-2.5 py-1 rounded-full font-semibold" style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.6)' }}>
@@ -859,23 +1171,24 @@ const GamePlay: React.FC<{
             <span className="text-xs px-2.5 py-1 rounded-full font-semibold" style={{ background: 'rgba(234,179,8,0.15)', color: '#eab308' }}>
               {question.points} pts
             </span>
+            <span className="text-xs px-2.5 py-1 rounded-full font-semibold" style={{ background: isMC ? 'rgba(59,130,246,0.15)' : 'rgba(34,197,94,0.15)', color: isMC ? '#3b82f6' : '#22c55e' }}>
+              {isMC ? '📋 MC' : '✍️ Open'}
+            </span>
           </div>
+          <button onClick={onExit} className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold text-red-400 hover:text-red-300 transition-colors" style={{ background: 'rgba(239,68,68,0.1)' }}>
+            <LogOut className="w-4 h-4" /> Exit Game
+          </button>
         </div>
 
-        {/* Progress */}
         <div className="w-full h-1.5 rounded-full mb-4" style={{ background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
           <div className="h-full rounded-full transition-all duration-500" style={{ width: `${progress}%`, background: 'linear-gradient(90deg, #a855f7, #ec4899)' }} />
         </div>
 
-        {/* Timer */}
         <div className="flex items-center justify-center mb-4">
           <div className="relative w-16 h-16">
             <svg className="w-full h-full" viewBox="0 0 60 60">
               <circle cx="30" cy="30" r="26" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="3" />
-              <circle cx="30" cy="30" r="26" fill="none" stroke={timerColor} strokeWidth="3"
-                strokeDasharray={circumference} strokeDashoffset={dashOffset} strokeLinecap="round"
-                style={{ transform: 'rotate(-90deg)', transformOrigin: 'center', transition: 'stroke-dashoffset 1s linear' }}
-              />
+              <circle cx="30" cy="30" r="26" fill="none" stroke={timerColor} strokeWidth="3" strokeDasharray={circumference} strokeDashoffset={dashOffset} strokeLinecap="round" style={{ transform: 'rotate(-90deg)', transformOrigin: 'center', transition: 'stroke-dashoffset 1s linear' }} />
             </svg>
             <div className="absolute inset-0 flex items-center justify-center">
               <span className="text-xl font-bold" style={{ color: timerColor }}>{timeLeft}</span>
@@ -883,32 +1196,31 @@ const GamePlay: React.FC<{
           </div>
         </div>
 
-        {/* Question Card */}
         <div className="rounded-2xl p-6 mb-4" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
-          {question.imageUrl && (
-            <div className="mb-4 rounded-xl overflow-hidden flex items-center justify-center min-h-[150px]" style={{ background: 'rgba(255,255,255,0.03)' }}>
-              <img src={question.imageUrl} alt="meme" className="max-w-full max-h-[250px] object-contain" onError={e => { (e.target as HTMLElement).style.display = 'none'; }} />
+          {question.imageData && (
+            <div className="mb-4 rounded-xl overflow-hidden flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.03)' }}>
+              <img src={question.imageData} alt="question" className="max-w-full max-h-[250px] object-contain" />
             </div>
           )}
-
+          {question.videoData && (
+            <div className="mb-4 rounded-xl overflow-hidden" style={{ background: 'rgba(255,255,255,0.03)' }}>
+              <video src={question.videoData} controls className="w-full max-h-[250px]" />
+            </div>
+          )}
+          {question.audioData && (
+            <div className="mb-4 p-4 rounded-xl flex items-center gap-3" style={{ background: 'rgba(6,182,212,0.08)', border: '1px solid rgba(6,182,212,0.15)' }}>
+              <div className="w-12 h-12 rounded-full flex items-center justify-center" style={{ background: 'rgba(6,182,212,0.2)' }}><Mic className="w-6 h-6" style={{ color: '#06b6d4' }} /></div>
+              <div className="flex-1"><audio src={question.audioData} controls className="w-full" /></div>
+            </div>
+          )}
           {question.type === 'song-tune' && question.audioHint && (
             <div className="mb-4 p-4 rounded-xl" style={{ background: 'rgba(236,72,153,0.08)', border: '1px solid rgba(236,72,153,0.15)' }}>
               <div className="flex items-center gap-2 mb-2">
                 <span className="text-xl">🎵</span>
                 <span className="text-sm font-semibold" style={{ color: '#ec4899' }}>Audio Clue</span>
-                <button onClick={() => setShowHint(!showHint)} className="ml-auto text-xs text-white/40 hover:text-white/60 underline">
-                  {showHint ? 'Hide' : 'Show'} Hint
-                </button>
+                <button onClick={() => setShowHint(!showHint)} className="ml-auto text-xs text-white/40 hover:text-white/60 underline">{showHint ? 'Hide' : 'Show'} Hint</button>
               </div>
-              {showHint ? (
-                <p className="text-sm text-white/60">{question.audioHint}</p>
-              ) : (
-                <div className="flex items-center gap-1 h-6">
-                  {[14, 22, 10, 18, 26, 12, 20].map((h, i) => (
-                    <div key={i} className="w-1.5 rounded-full animate-pulse" style={{ height: `${h}px`, background: 'rgba(236,72,153,0.4)', animationDelay: `${i * 0.1}s` }} />
-                  ))}
-                </div>
-              )}
+              {showHint ? <p className="text-sm text-white/60">{question.audioHint}</p> : <div className="flex items-center gap-1 h-6">{[14, 22, 10, 18, 26, 12, 20].map((h, i) => (<div key={i} className="w-1.5 rounded-full animate-pulse" style={{ height: `${h}px`, background: 'rgba(236,72,153,0.4)', animationDelay: `${i * 0.1}s` }} />))}</div>}
             </div>
           )}
 
@@ -924,84 +1236,41 @@ const GamePlay: React.FC<{
           </div>
         </div>
 
-        {/* Options */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
-          {(question.shuffledOptions || question.options).map((opt: string, idx: number) => {
-            const isCorrect = opt === question.answer;
-            const _isWrong = hasAnswered && opt !== question.answer;
-            void _isWrong;
-
-            return (
-              <button key={idx}
-                onClick={() => handleAnswer(opt)}
-                disabled={hasAnswered}
-                className="p-4 rounded-xl text-left transition-all duration-300"
-                style={{
-                  background: hasAnswered && isCorrect ? 'rgba(34,197,94,0.15)' : hasAnswered && !isCorrect ? 'rgba(239,68,68,0.1)' : hasAnswered ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.05)',
-                  border: hasAnswered && isCorrect ? '2px solid #22c55e' : hasAnswered && !isCorrect ? '2px solid rgba(239,68,68,0.3)' : hasAnswered ? '1px solid rgba(255,255,255,0.05)' : '1px solid rgba(255,255,255,0.1)',
-                  opacity: hasAnswered && !isCorrect ? 0.5 : 1,
-                  cursor: hasAnswered ? 'default' : 'pointer',
-                  transform: !hasAnswered ? 'translateY(0)' : 'translateY(0)',
-                }}
-                onMouseEnter={e => {
-                  if (!hasAnswered) {
-                    (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.1)';
-                    (e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,255,255,0.2)';
-                  }
-                }}
-                onMouseLeave={e => {
-                  if (!hasAnswered) {
-                    (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.05)';
-                    (e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,255,255,0.1)';
-                  }
-                }}
-              >
+        {isMC ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+            {(question.shuffledOptions || question.options || []).map((opt: string, idx: number) => (
+              <button key={idx} onClick={handleMCOptionClick} disabled={hasAnswered}
+                className="p-4 rounded-xl text-left transition-all duration-300 hover:bg-white/10"
+                style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', cursor: hasAnswered ? 'default' : 'pointer' }}>
                 <div className="flex items-center gap-3">
-                  <span className="w-9 h-9 rounded-lg flex items-center justify-center text-sm font-bold flex-shrink-0"
-                    style={{
-                      background: hasAnswered && isCorrect ? 'rgba(34,197,94,0.25)' : hasAnswered && !isCorrect ? 'rgba(239,68,68,0.2)' : 'rgba(255,255,255,0.08)',
-                      color: hasAnswered && isCorrect ? '#22c55e' : hasAnswered && !isCorrect ? '#ef4444' : 'rgba(255,255,255,0.5)',
-                      fontSize: hasAnswered ? '1.1rem' : '0.875rem',
-                    }}>
-                    {hasAnswered && isCorrect ? '✓' : hasAnswered && !isCorrect ? '✗' : String.fromCharCode(65 + idx)}
+                  <span className="w-9 h-9 rounded-lg flex items-center justify-center text-sm font-bold flex-shrink-0" style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.5)' }}>
+                    {String.fromCharCode(65 + idx)}
                   </span>
-                  <span className="text-sm font-medium"
-                    style={{
-                      color: hasAnswered && isCorrect ? '#22c55e' : hasAnswered && !isCorrect ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.8)',
-                      textDecoration: hasAnswered && !isCorrect ? 'line-through' : 'none',
-                    }}>
-                    {opt}
-                  </span>
+                  <span className="text-sm font-medium text-white/80">{opt}</span>
                 </div>
               </button>
-            );
-          })}
-        </div>
+            ))}
+          </div>
+        ) : (
+          <div className="mb-4 text-center">
+            <div className="py-6 px-4 rounded-xl mb-4" style={{ background: 'rgba(255,255,255,0.02)', border: '1px dashed rgba(255,255,255,0.1)' }}>
+              <p className="text-white/40 mb-1 font-semibold uppercase tracking-wider text-xs">Open Ended Question</p>
+              <p className="text-sm text-white/60">Read the question aloud. When they answer, reveal to verify and award points.</p>
+            </div>
+            <button onClick={handleRevealClick} disabled={hasAnswered} className="w-full py-5 rounded-xl text-xl font-bold text-white transition-all active:scale-[0.98]"
+              style={{ background: 'linear-gradient(135deg, #a855f7, #ec4899)', boxShadow: '0 8px 25px rgba(168,85,247,0.3)' }}>
+              <Eye className="w-6 h-6 inline mr-2" /> Reveal Answer
+            </button>
+          </div>
+        )}
 
-        {/* Buttons */}
-        <div className="flex gap-3">
-          {!hasAnswered && (
-            <button className="flex-1 py-3 rounded-xl font-semibold text-white/60 flex items-center justify-center gap-2 transition-all"
-              style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }}
-              onClick={() => { setHasAnswered(true); onReveal(); }}>
-              <Eye className="w-4 h-4" /> Skip & Reveal
-            </button>
-          )}
-          {hasAnswered && roundNumber < totalRounds && (
-            <button className="flex-1 py-3 rounded-xl font-bold text-white flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
-              style={{ background: 'linear-gradient(135deg, #a855f7, #ec4899)', boxShadow: '0 4px 15px rgba(168,85,247,0.3)' }}
-              onClick={onNext}>
-              Next Question <SkipForward className="w-5 h-5" />
-            </button>
-          )}
-          {hasAnswered && roundNumber >= totalRounds && (
-            <button className="flex-1 py-3 rounded-xl font-bold text-white flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
-              style={{ background: 'linear-gradient(135deg, #a855f7, #ec4899)', boxShadow: '0 4px 15px rgba(168,85,247,0.3)' }}
-              onClick={onEnd}>
-              🏆 See Final Results
-            </button>
-          )}
-        </div>
+        {isMC && !hasAnswered && (
+          <button className="w-full py-3 rounded-xl font-semibold text-white/60 flex items-center justify-center gap-2 transition-all"
+            style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }}
+            onClick={handleRevealClick}>
+            <Eye className="w-4 h-4" /> Skip & Reveal
+          </button>
+        )}
       </div>
     </div>
   );
@@ -1010,95 +1279,69 @@ const GamePlay: React.FC<{
 // ==================== REVEAL SCREEN ====================
 const RevealScreen: React.FC<{
   question: GameContent;
-  isCorrect: boolean;
   roundNumber: number;
   totalRounds: number;
   scores: { players: Player[]; teams: Team[]; mode: GameMode };
-  onNext: () => void;
-  onEnd: () => void;
-}> = ({ question, isCorrect, roundNumber, totalRounds, scores, onNext, onEnd }) => {
+  onNext: (winnerId: string | 'nobody') => void;
+}> = ({ question, roundNumber, totalRounds, scores, onNext }) => {
+  const [winnerId, setWinnerId] = useState<string | null>(null);
   const progress = (roundNumber / totalRounds) * 100;
+  const entities = scores.mode === 'team' ? scores.teams : scores.players;
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4">
+    <div className="min-h-screen flex items-center justify-center px-4 py-6">
       <div className="max-w-xl w-full">
         <div className="w-full h-1.5 rounded-full mb-6" style={{ background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
           <div className="h-full rounded-full" style={{ width: `${progress}%`, background: 'linear-gradient(90deg, #a855f7, #ec4899)' }} />
         </div>
 
-        <div className="rounded-2xl p-8 text-center mb-6" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
-          <div className="text-7xl mb-4">{isCorrect ? '🎉' : '😅'}</div>
-          <h2 className="text-3xl font-black mb-2" style={{ color: isCorrect ? '#22c55e' : '#ef4444' }}>
-            {isCorrect ? 'CORRECT!' : 'WRONG!'}
+        <div className="rounded-2xl p-6 sm:p-8 text-center mb-6" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
+          <div className="text-5xl mb-4">🎯</div>
+          <h2 className="text-xl font-bold mb-3 text-white/60 uppercase tracking-widest">
+            The Answer Is
           </h2>
 
-          {isCorrect && (
-            <div className="flex items-center justify-center gap-2 mb-4">
-              <Star className="w-5 h-5 text-yellow-400" />
-              <span className="text-xl font-bold text-yellow-400">+{question.points} points!</span>
-              <Star className="w-5 h-5 text-yellow-400" />
-            </div>
-          )}
-
-          <div className="p-4 rounded-xl mb-4" style={{ background: isCorrect ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)', border: `1px solid ${isCorrect ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)'}` }}>
-            <p className="text-sm text-white/40 mb-1">Correct Answer:</p>
-            <p className="text-lg font-bold" style={{ color: '#22c55e' }}>{question.answer}</p>
+          <div className="p-6 rounded-xl mb-4" style={{ background: 'rgba(34,197,94,0.15)', border: '2px solid rgba(34,197,94,0.4)' }}>
+            <p className="text-2xl sm:text-3xl font-black text-green-400">{question.answer}</p>
           </div>
 
-          {question.type === 'song-tune' && question.audioHint && (
-            <div className="p-3 rounded-xl" style={{ background: 'rgba(236,72,153,0.08)', border: '1px solid rgba(236,72,153,0.15)' }}>
-              <p className="text-xs mb-1" style={{ color: '#ec4899' }}>🎵 Song Hint</p>
-              <p className="text-sm text-white/60">{question.audioHint}</p>
-            </div>
-          )}
+          <div className="flex items-center justify-center gap-2">
+            <Star className="w-5 h-5 text-yellow-400" />
+            <span className="text-xl font-bold text-yellow-400">Worth {question.points} points</span>
+            <Star className="w-5 h-5 text-yellow-400" />
+          </div>
         </div>
 
-        {/* Scores */}
-        {scores.mode === 'team' && scores.teams.length > 0 && (
-          <div className="rounded-2xl p-4 mb-6" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
-            <h3 className="text-sm font-bold text-white/40 mb-3 flex items-center gap-2"><Trophy className="w-4 h-4 text-yellow-400" /> Team Scores</h3>
-            <div className="space-y-2">
-              {[...scores.teams].sort((a, b) => b.score - a.score).map((t, i) => (
-                <div key={t.id} className="flex items-center gap-3 p-2 rounded-lg" style={{ background: 'rgba(255,255,255,0.03)' }}>
-                  <span className="text-sm text-white/30 w-6">#{i + 1}</span>
-                  <span className="text-xl">{t.emoji}</span>
-                  <span className="font-medium flex-1">{t.name}</span>
-                  <span className="font-bold text-yellow-400">{t.score} pts</span>
-                </div>
-              ))}
-            </div>
+        <div className="rounded-2xl p-6 mb-6 text-center" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
+          <h3 className="text-lg font-bold mb-4">Who gave the right answer?</h3>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {entities.map(e => (
+              <button key={e.id} onClick={() => setWinnerId(e.id)}
+                className={`p-3 rounded-xl border-2 transition-all flex flex-col items-center gap-1 ${winnerId === e.id ? 'border-green-400 bg-green-400/20 shadow-[0_0_15px_rgba(34,197,94,0.3)]' : 'border-white/10 bg-white/5 hover:bg-white/10'}`}>
+                <span className="text-2xl">{('emoji' in e) ? (e as Team).emoji : '👤'}</span>
+                <span className="font-semibold text-sm truncate w-full px-1">{e.name}</span>
+              </button>
+            ))}
+            <button onClick={() => setWinnerId('nobody')}
+              className={`p-3 rounded-xl border-2 transition-all flex flex-col items-center gap-1 ${winnerId === 'nobody' ? 'border-red-400 bg-red-400/20 shadow-[0_0_15px_rgba(239,68,68,0.3)]' : 'border-white/10 bg-white/5 hover:bg-white/10'}`}>
+              <span className="text-2xl">❌</span>
+              <span className="font-semibold text-sm">Nobody</span>
+            </button>
           </div>
-        )}
+        </div>
 
-        {scores.mode === 'individual' && scores.players.length > 0 && (
-          <div className="rounded-2xl p-4 mb-6" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
-            <h3 className="text-sm font-bold text-white/40 mb-3 flex items-center gap-2"><Trophy className="w-4 h-4 text-yellow-400" /> Player Scores</h3>
-            <div className="space-y-2">
-              {[...scores.players].sort((a, b) => b.score - a.score).map((p, i) => (
-                <div key={p.id} className="flex items-center gap-3 p-2 rounded-lg" style={{ background: 'rgba(255,255,255,0.03)' }}>
-                  <span className="text-sm text-white/30 w-6">#{i + 1}</span>
-                  <span>👤</span>
-                  <span className="font-medium flex-1">{p.name}</span>
-                  <span className="font-bold text-purple-400">{p.score} pts</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {roundNumber < totalRounds ? (
-          <button className="w-full py-4 rounded-xl text-lg font-bold text-white flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
-            style={{ background: 'linear-gradient(135deg, #a855f7, #ec4899)' }}
-            onClick={onNext}>
-            Next Question <ArrowLeft className="w-5 h-5" style={{ transform: 'rotate(180deg)' }} />
-          </button>
-        ) : (
-          <button className="w-full py-4 rounded-xl text-lg font-bold text-white flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
-            style={{ background: 'linear-gradient(135deg, #a855f7, #ec4899)' }}
-            onClick={onEnd}>
-            🏆 See Final Results
-          </button>
-        )}
+        <button
+          disabled={!winnerId}
+          className="w-full py-4 rounded-xl text-lg font-bold text-white flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
+          style={{
+            background: 'linear-gradient(135deg, #a855f7, #ec4899)',
+            opacity: winnerId ? 1 : 0.4,
+            cursor: winnerId ? 'pointer' : 'not-allowed',
+            boxShadow: winnerId ? '0 8px 25px rgba(168,85,247,0.3)' : 'none'
+          }}
+          onClick={() => onNext(winnerId!)}>
+          {roundNumber < totalRounds ? 'Next Question' : 'See Final Results'}
+        </button>
       </div>
     </div>
   );
@@ -1113,26 +1356,21 @@ const Scoreboard: React.FC<{
   onNewSetup: () => void;
   onHome: () => void;
 }> = ({ scores, rounds, timePerQ, onPlayAgain, onNewSetup, onHome }) => {
-  const totalScore = scores.mode === 'team'
-    ? scores.teams.reduce((s, t) => s + t.score, 0)
-    : scores.players.reduce((s, p) => s + p.score, 0);
-
-  const winner = scores.mode === 'team'
-    ? [...scores.teams].sort((a, b) => b.score - a.score)[0]
-    : scores.players.length > 0 ? [...scores.players].sort((a, b) => b.score - a.score)[0] : null;
-
+  const totalScore = scores.mode === 'team' ? scores.teams.reduce((s, t) => s + t.score, 0) : scores.players.reduce((s, p) => s + p.score, 0);
+  const sorted = scores.mode === 'team' ? [...scores.teams].sort((a, b) => b.score - a.score) : [...scores.players].sort((a, b) => b.score - a.score);
+  const winner = sorted.length > 0 ? sorted[0] : null;
   const medal = (i: number) => i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`;
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4">
+    <div className="min-h-screen flex items-center justify-center px-4 py-6">
       <div className="max-w-xl w-full">
         {winner && (
           <div className="text-center mb-8">
-            <div className="text-7xl mb-4">🏆</div>
+            <div className="text-7xl mb-4 animate-bounce">🏆</div>
             <h1 className="text-4xl sm:text-5xl font-black mb-2">
-              <GradientText>{'name' in winner ? winner.name : 'Team'} Wins!</GradientText>
+              <GradientText>{winner.name} Wins!</GradientText>
             </h1>
-            <p className="text-white/40">{'emoji' in winner ? `${(winner as any).emoji}` : '👤'} The champion!</p>
+            <p className="text-white/40">{'emoji' in winner ? `${(winner as Team).emoji}` : '👤'} The champion!</p>
           </div>
         )}
 
@@ -1142,49 +1380,21 @@ const Scoreboard: React.FC<{
             <span className="text-sm text-white/40">Total: {totalScore} pts</span>
           </div>
 
-          {scores.mode === 'team' ? (
-            <div className="space-y-3">
-              {[...scores.teams].sort((a, b) => b.score - a.score).map((team, idx) => (
-                <div key={team.id} className="p-4 rounded-xl flex items-center gap-4" style={{
-                  background: idx === 0 ? 'rgba(234,179,8,0.1)' : 'rgba(255,255,255,0.03)',
-                  border: idx === 0 ? '1px solid rgba(234,179,8,0.3)' : '1px solid rgba(255,255,255,0.05)',
-                }}>
-                  <span className="text-2xl w-10 text-center">{medal(idx)}</span>
-                  <span className="text-3xl">{team.emoji}</span>
-                  <div className="flex-1">
-                    <p className="font-bold">{team.name}</p>
-                    <div className="mt-1 w-full h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.05)' }}>
-                      <div className="h-full rounded-full" style={{ width: `${scores.teams[0]?.score ? (team.score / scores.teams[0].score) * 100 : 0}%`, background: team.color }} />
-                    </div>
+          <div className="space-y-3">
+            {sorted.map((item, idx) => (
+              <div key={item.id} className="p-4 rounded-xl flex items-center gap-4" style={{ background: idx === 0 ? 'rgba(234,179,8,0.1)' : 'rgba(255,255,255,0.03)', border: idx === 0 ? '1px solid rgba(234,179,8,0.3)' : '1px solid rgba(255,255,255,0.05)' }}>
+                <span className="text-2xl w-10 text-center">{medal(idx)}</span>
+                <span className="text-3xl">{('emoji' in item) ? (item as Team).emoji : '👤'}</span>
+                <div className="flex-1">
+                  <p className="font-bold">{item.name}</p>
+                  <div className="mt-1 w-full h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.05)' }}>
+                    <div className="h-full rounded-full" style={{ width: `${sorted[0]?.score ? (item.score / sorted[0].score) * 100 : 0}%`, background: ('color' in item) ? (item as Team).color : '#a855f7' }} />
                   </div>
-                  <p className="font-bold text-xl" style={{ color: team.color }}>{team.score}</p>
                 </div>
-              ))}
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {scores.players.length > 0 ? [...scores.players].sort((a, b) => b.score - a.score).map((p, idx) => (
-                <div key={p.id} className="p-4 rounded-xl flex items-center gap-4" style={{
-                  background: idx === 0 ? 'rgba(234,179,8,0.1)' : 'rgba(255,255,255,0.03)',
-                  border: idx === 0 ? '1px solid rgba(234,179,8,0.3)' : '1px solid rgba(255,255,255,0.05)',
-                }}>
-                  <span className="text-2xl w-10 text-center">{medal(idx)}</span>
-                  <span className="text-xl">👤</span>
-                  <div className="flex-1">
-                    <p className="font-bold">{p.name}</p>
-                    {p.bestStreak >= 2 && <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'rgba(249,115,22,0.15)', color: '#f97316' }}>🔥 Best: {p.bestStreak}</span>}
-                  </div>
-                  <p className="font-bold text-xl text-purple-400">{p.score}</p>
-                </div>
-              )) : (
-                <div className="text-center py-8">
-                  <Star className="w-12 h-12 mx-auto mb-3 text-white/20" />
-                  <p className="text-white/40">Scores tracked anonymously</p>
-                  <p className="text-sm text-white/20 mt-1">Total: {totalScore} pts</p>
-                </div>
-              )}
-            </div>
-          )}
+                <p className="font-bold text-xl" style={{ color: ('color' in item) ? (item as Team).color : '#a855f7' }}>{item.score}</p>
+              </div>
+            ))}
+          </div>
         </div>
 
         <div className="grid grid-cols-3 gap-3 mb-6">
@@ -1201,20 +1411,14 @@ const Scoreboard: React.FC<{
         </div>
 
         <div className="space-y-3">
-          <button className="w-full py-4 rounded-xl text-lg font-bold text-white flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
-            style={{ background: 'linear-gradient(135deg, #a855f7, #ec4899)' }}
-            onClick={onPlayAgain}>
+          <button className="w-full py-4 rounded-xl text-lg font-bold text-white flex items-center justify-center gap-2 transition-all active:scale-[0.98]" style={{ background: 'linear-gradient(135deg, #a855f7, #ec4899)' }} onClick={onPlayAgain}>
             <RotateCcw className="w-5 h-5" /> Play Again
           </button>
           <div className="grid grid-cols-2 gap-3">
-            <button className="py-3 rounded-xl font-semibold text-white/60 flex items-center justify-center gap-2 transition-all"
-              style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }}
-              onClick={onNewSetup}>
+            <button className="py-3 rounded-xl font-semibold text-white/60 flex items-center justify-center gap-2 transition-all" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }} onClick={onNewSetup}>
               <Users className="w-4 h-4" /> New Setup
             </button>
-            <button className="py-3 rounded-xl font-semibold text-white/60 flex items-center justify-center gap-2 transition-all"
-              style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }}
-              onClick={onHome}>
+            <button className="py-3 rounded-xl font-semibold text-white/60 flex items-center justify-center gap-2 transition-all" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }} onClick={onHome}>
               <Home className="w-4 h-4" /> Home
             </button>
           </div>
@@ -1226,8 +1430,7 @@ const Scoreboard: React.FC<{
 
 // ==================== MAIN APP ====================
 const App: React.FC = () => {
-  const [screen, setScreen] = useState<GameScreen>('home');
-  // Content is read directly from localStorage when needed
+  const [screen, setScreen] = useState<GameScreen>('loading');
   const [gameSettings, setGameSettings] = useState<any>(null);
   const [gameState, setGameState] = useState({
     players: [] as Player[],
@@ -1235,26 +1438,25 @@ const App: React.FC = () => {
     questions: [] as (GameContent & { shuffledOptions?: string[] })[],
     currentIdx: 0,
     currentQuestion: null as GameContent | null,
-    selectedAnswer: null as string | null,
-    isCorrect: null as boolean | null,
-    isRevealed: false,
   });
   const [gameStats, setGameStats] = useState(loadStats);
+  const [showExitConfirm, setShowExitConfirm] = useState(false);
 
   const navigate = (s: GameScreen) => setScreen(s);
 
-  const startGame = (settings: any) => {
+  const handleStartGame = (settings: any) => {
     setGameSettings(settings);
     const latestContent = loadContent();
-    const filtered = latestContent.filter((c: GameContent) => settings.categories.includes(c.type));
+    const filtered = latestContent.filter((c: GameContent) =>
+      settings.categories.includes(c.type) && settings.questionTypes.includes(c.questionType || 'multiple-choice')
+    );
     const shuffled = shuffle(filtered).slice(0, settings.rounds);
     const questions = shuffled.map(q => ({
-      ...q,
-      shuffledOptions: shuffle(q.options),
+      ...q, shuffledOptions: q.options ? shuffle(q.options) : undefined,
     }));
 
     if (questions.length === 0) {
-      alert('No content available! Add some in Admin first.');
+      setAlertInfo({ open: true, title: 'No questions available', message: 'Please add questions in the Admin panel before starting a game.' });
       return;
     }
 
@@ -1264,85 +1466,55 @@ const App: React.FC = () => {
       questions,
       currentIdx: 0,
       currentQuestion: questions[0],
-      selectedAnswer: null,
-      isCorrect: null,
-      isRevealed: false,
     });
     setScreen('lobby');
   };
 
-  const handleStartGame = () => {
-    setScreen('playing');
-  };
+  const handleReveal = () => setScreen('reveal');
 
-  const handleAnswer = (answer: string) => {
+  const handleNext = (winnerId: string | 'nobody') => {
     const q = gameState.currentQuestion;
-    if (!q) return;
-    const correct = answer === q.answer;
-    const pts = correct ? q.points : 0;
+    const pts = q ? q.points : 0;
+    let updatedPlayers = [...gameState.players];
+    let updatedTeams = [...gameState.teams];
 
-    const updatedPlayers = gameState.players.map((p: Player) => ({
-      ...p,
-      score: p.score + (correct ? pts : 0),
-      streak: correct ? p.streak + 1 : 0,
-      bestStreak: correct ? Math.max(p.bestStreak, p.streak + 1) : p.bestStreak,
-      correctAnswers: correct ? p.correctAnswers + 1 : p.correctAnswers,
-      totalAnswers: p.totalAnswers + 1,
-    }));
+    if (winnerId !== 'nobody') {
+      if (gameSettings.mode === 'team') {
+        updatedTeams = updatedTeams.map(t => t.id === winnerId ? { ...t, score: t.score + pts } : t);
+      } else {
+        updatedPlayers = updatedPlayers.map(p => p.id === winnerId ? { ...p, score: p.score + pts, correctAnswers: p.correctAnswers + 1, streak: p.streak + 1, bestStreak: Math.max(p.bestStreak, p.streak + 1) } : { ...p, streak: 0 });
+      }
+    } else if (gameSettings.mode !== 'team') {
+      updatedPlayers = updatedPlayers.map(p => ({ ...p, streak: 0 }));
+    }
 
-    const updatedTeams = gameState.teams.map((t: Team) => ({
-      ...t,
-      score: t.score + (correct ? pts : 0),
-    }));
-
-    setGameState(prev => ({
-      ...prev,
-      selectedAnswer: answer,
-      isCorrect: correct,
-      players: updatedPlayers,
-      teams: updatedTeams,
-    }));
-  };
-
-  const handleReveal = () => {
-    setGameState(prev => ({ ...prev, isRevealed: true }));
-    setScreen('reveal');
-  };
-
-  const handleNext = () => {
     const nextIdx = gameState.currentIdx + 1;
     if (nextIdx >= gameState.questions.length) {
-      handleEnd();
-      return;
+      const stats = loadStats();
+      stats.gamesPlayed += 1;
+      stats.lastPlayed = new Date().toISOString();
+      saveStats(stats);
+      setGameStats(stats);
+      setGameState(prev => ({ ...prev, players: updatedPlayers, teams: updatedTeams }));
+      setScreen('scoreboard');
+    } else {
+      setGameState(prev => ({
+        ...prev, players: updatedPlayers, teams: updatedTeams,
+        currentIdx: nextIdx, currentQuestion: prev.questions[nextIdx],
+      }));
+      setScreen('playing');
     }
-    setGameState(prev => ({
-      ...prev,
-      currentIdx: nextIdx,
-      currentQuestion: prev.questions[nextIdx],
-      selectedAnswer: null,
-      isCorrect: null,
-      isRevealed: false,
-    }));
-    setScreen('playing');
   };
 
-  const handleEnd = () => {
-    const stats = loadStats();
-    stats.gamesPlayed += 1;
-    stats.lastPlayed = new Date().toISOString();
-    saveStats(stats);
-    setGameStats(stats);
-    setScreen('scoreboard');
+  const confirmExitGame = () => {
+    setGameState({ players: [], teams: [], questions: [], currentIdx: 0, currentQuestion: null });
+    setShowExitConfirm(false);
+    setScreen('home');
   };
 
   const handlePlayAgain = () => {
     setGameState(prev => ({
-      ...prev,
-      currentIdx: 0,
-      currentQuestion: prev.questions[0],
-      selectedAnswer: null,
-      isCorrect: null,
-      isRevealed: false,
+      ...prev, currentIdx: 0, currentQuestion: prev.questions[0],
       players: prev.players.map((p: Player) => ({ ...p, score: 0, streak: 0, bestStreak: 0, correctAnswers: 0, totalAnswers: 0 })),
       teams: prev.teams.map((t: Team) => ({ ...t, score: 0 })),
     }));
@@ -1350,72 +1522,37 @@ const App: React.FC = () => {
   };
 
   const handleNewSetup = () => {
-    setGameState({
-      players: [],
-      teams: [],
-      questions: [],
-      currentIdx: 0,
-      currentQuestion: null,
-      selectedAnswer: null,
-      isCorrect: null,
-      isRevealed: false,
-    });
+    setGameState({ players: [], teams: [], questions: [], currentIdx: 0, currentQuestion: null });
     setScreen('setup');
   };
 
-  const handleHome = () => {
-    setScreen('home');
-  };
-
-  const totalContent = loadContent().length;
+  const [alertInfo, setAlertInfo] = useState<{ open: boolean; title: string; message: string }>({ open: false, title: '', message: '' });
 
   return (
     <AnimatedBg>
-      {screen === 'home' && (
-        <HomeScreen onNavigate={navigate} stats={{ total: totalContent, games: gameStats.gamesPlayed }} />
-      )}
-      {screen === 'admin' && (
-        <AdminScreen onBack={() => navigate('home')} />
-      )}
-      {screen === 'setup' && (
-        <GameSetup onBack={() => navigate('home')} onStart={startGame} />
-      )}
-      {screen === 'lobby' && gameSettings && (
-        <GameLobby settings={gameSettings} onStart={handleStartGame} onBack={() => navigate('setup')} />
-      )}
+      <AlertModal open={alertInfo.open} title={alertInfo.title} message={alertInfo.message} onOk={() => setAlertInfo({ open: false, title: '', message: '' })} />
+      <ConfirmModal
+        open={showExitConfirm}
+        title="Exit game?"
+        message="Your current round progress will be lost and you will return to the home screen."
+        confirmLabel="Exit"
+        destructive
+        onCancel={() => setShowExitConfirm(false)}
+        onConfirm={confirmExitGame}
+      />
+      {screen === 'loading' && <LoadingScreen onComplete={() => setScreen('home')} />}
+      {screen === 'home' && <HomeScreen onNavigate={navigate} stats={{ total: loadContent().length, games: gameStats.gamesPlayed }} />}
+      {screen === 'admin' && <AdminScreen onBack={() => navigate('home')} />}
+      {screen === 'setup' && <GameSetup onBack={() => navigate('home')} onStart={handleStartGame} />}
+      {screen === 'lobby' && gameSettings && <GameLobby settings={gameSettings} onStart={() => setScreen('playing')} onBack={() => navigate('setup')} />}
       {screen === 'playing' && gameState.currentQuestion && (
-        <GamePlay
-          question={gameState.currentQuestion}
-          roundNumber={gameState.currentIdx + 1}
-          totalRounds={gameState.questions.length}
-          timePerQ={gameSettings?.timePerQ || 30}
-          onAnswer={handleAnswer}
-          onReveal={handleReveal}
-          onNext={handleNext}
-          onEnd={handleEnd}
-          scores={{ players: gameState.players, teams: gameState.teams, mode: gameSettings?.mode || 'individual' }}
-        />
+        <GamePlay question={gameState.currentQuestion} roundNumber={gameState.currentIdx + 1} totalRounds={gameState.questions.length} timePerQ={gameSettings?.timePerQ || 30} onReveal={handleReveal} onExit={() => setShowExitConfirm(true)} />
       )}
       {screen === 'reveal' && gameState.currentQuestion && (
-        <RevealScreen
-          question={gameState.currentQuestion}
-          isCorrect={gameState.isCorrect || false}
-          roundNumber={gameState.currentIdx + 1}
-          totalRounds={gameState.questions.length}
-          scores={{ players: gameState.players, teams: gameState.teams, mode: gameSettings?.mode || 'individual' }}
-          onNext={handleNext}
-          onEnd={handleEnd}
-        />
+        <RevealScreen question={gameState.currentQuestion} roundNumber={gameState.currentIdx + 1} totalRounds={gameState.questions.length} scores={{ players: gameState.players, teams: gameState.teams, mode: gameSettings?.mode || 'individual' }} onNext={handleNext} />
       )}
       {screen === 'scoreboard' && (
-        <Scoreboard
-          scores={{ players: gameState.players, teams: gameState.teams, mode: gameSettings?.mode || 'individual' }}
-          rounds={gameSettings?.rounds || 5}
-          timePerQ={gameSettings?.timePerQ || 30}
-          onPlayAgain={handlePlayAgain}
-          onNewSetup={handleNewSetup}
-          onHome={handleHome}
-        />
+        <Scoreboard scores={{ players: gameState.players, teams: gameState.teams, mode: gameSettings?.mode || 'individual' }} rounds={gameSettings?.rounds || 5} timePerQ={gameSettings?.timePerQ || 30} onPlayAgain={handlePlayAgain} onNewSetup={handleNewSetup} onHome={() => setScreen('home')} />
       )}
     </AnimatedBg>
   );
