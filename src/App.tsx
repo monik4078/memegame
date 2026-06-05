@@ -3,13 +3,15 @@ import {
   Gamepad2, Settings, Trophy, Music, Film, MessageSquare,
   Zap, Users, ArrowLeft, Plus, Edit2, Trash2, Save, X, Upload,
   Search, User, Clock, Check, Play, Eye, RotateCcw,
-  Home, Star, LogOut, Mic, Video, Image, FileQuestion
+  Home, Star, LogOut, Mic, Video, Image, FileQuestion,
+  Sun, Moon
 } from 'lucide-react';
+import { supabase } from './supabaseClient';
 
 // ==================== TYPES ====================
 type ContentType = 'meme-dialogue' | 'song-tune' | 'movie-meme';
 type GameMode = 'individual' | 'team';
-type GameScreen = 'loading' | 'home' | 'admin' | 'setup' | 'lobby' | 'playing' | 'reveal' | 'scoreboard';
+type GameScreen = 'loading' | 'home' | 'admin' | 'admin-login' | 'setup' | 'lobby' | 'playing' | 'reveal' | 'scoreboard';
 type QuestionType = 'multiple-choice' | 'open-ended';
 
 interface GameContent {
@@ -62,10 +64,6 @@ function loadContent(): GameContent[] {
   } catch { return SAMPLE_CONTENT; }
 }
 
-function saveContent(c: GameContent[]) {
-  localStorage.setItem('gv_content', JSON.stringify(c));
-}
-
 function loadStats() {
   try {
     const d = localStorage.getItem('gv_stats');
@@ -86,20 +84,102 @@ function fileToBase64(file: File): Promise<string> {
   });
 }
 
+function getFileNameFromUrl(url: string | undefined): string | null {
+  if (!url || !url.includes('/storage/v1/object/public/game-media/')) return null;
+  const parts = url.split('/');
+  const lastPart = parts[parts.length - 1];
+  return lastPart.split('?')[0];
+}
+
+function mapFromDb(dbItem: any): GameContent {
+  return {
+    id: dbItem.id,
+    type: dbItem.type,
+    questionType: dbItem.question_type as QuestionType,
+    question: dbItem.question,
+    answer: dbItem.answer,
+    options: dbItem.options || [],
+    imageUrl: dbItem.image_url || undefined,
+    imageData: dbItem.image_url || undefined,
+    videoUrl: dbItem.video_url || undefined,
+    videoData: dbItem.video_url || undefined,
+    audioUrl: dbItem.audio_url || undefined,
+    audioData: dbItem.audio_url || undefined,
+    audioHint: dbItem.audio_hint || undefined,
+    difficulty: dbItem.difficulty as 'easy' | 'medium' | 'hard',
+    points: dbItem.points,
+  };
+}
+
 // ==================== ANIMATED BACKGROUND ====================
-const AnimatedBg: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <div className="relative min-h-screen" style={{ background: '#0a0a1a', color: '#ffffff', fontFamily: 'system-ui, sans-serif', overflow: 'hidden' }}>
+const AnimatedBg: React.FC<{ children: React.ReactNode; isDark: boolean }> = ({ children, isDark }) => (
+  <div className="relative min-h-screen transition-colors duration-300"
+    style={{
+      background: isDark ? '#0a0a1a' : '#f8fafc',
+      color: isDark ? '#ffffff' : '#0f172a',
+      fontFamily: 'system-ui, sans-serif',
+      overflow: 'hidden',
+      '--bg-color': isDark ? '#0a0a1a' : '#f8fafc',
+      '--text-color': isDark ? '#ffffff' : '#0f172a',
+      '--text-muted': isDark ? 'rgba(255,255,255,0.5)' : 'rgba(15,23,42,0.6)',
+      '--text-very-muted': isDark ? 'rgba(255,255,255,0.3)' : 'rgba(15,23,42,0.35)',
+      '--card-bg': isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.7)',
+      '--card-border': isDark ? 'rgba(255,255,255,0.1)' : 'rgba(168,85,247,0.12)',
+      '--modal-bg': isDark ? 'rgba(18,18,42,0.96)' : 'rgba(255,255,255,0.98)',
+      '--input-bg': isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.03)',
+      '--input-border': isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)',
+    } as any}>
+    <style>{`
+      .text-theme-main { color: var(--text-color) !important; }
+      .text-theme-muted { color: var(--text-muted) !important; }
+      .text-theme-very-muted { color: var(--text-very-muted) !important; }
+      .bg-theme-card { background-color: var(--card-bg) !important; }
+      .border-theme-card { border-color: var(--card-border) !important; }
+      .bg-theme-input { background-color: var(--input-bg) !important; border-color: var(--input-border) !important; }
+
+      /* Override text-white opacity utilities when in light mode */
+      ${!isDark ? `
+        .text-white\\/30 { color: rgba(15, 23, 42, 0.35) !important; }
+        .text-white\\/40 { color: rgba(15, 23, 42, 0.45) !important; }
+        .text-white\\/55 { color: rgba(15, 23, 42, 0.55) !important; }
+        .text-white\\/60 { color: rgba(15, 23, 42, 0.65) !important; }
+        .text-white\\/70 { color: rgba(15, 23, 42, 0.75) !important; }
+        .text-white\\/80 { color: rgba(15, 23, 42, 0.85) !important; }
+        .text-white { color: #0f172a !important; }
+        .bg-white\\/5 { background-color: rgba(0, 0, 0, 0.03) !important; }
+        .bg-white\\/10 { background-color: rgba(0, 0, 0, 0.06) !important; }
+        .bg-white\\/20 { background-color: rgba(0, 0, 0, 0.1) !important; }
+        .bg-white\\/30 { background-color: rgba(0, 0, 0, 0.15) !important; }
+        .border-white\\/10 { border-color: rgba(0, 0, 0, 0.08) !important; }
+        .border-white\\/12 { border-color: rgba(0, 0, 0, 0.1) !important; }
+      ` : ''}
+    `}</style>
     <div style={{
       position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 0,
-      background: `
+      background: isDark ? `
         radial-gradient(ellipse at 20% 50%, rgba(168,85,247,0.15) 0%, transparent 50%),
         radial-gradient(ellipse at 80% 20%, rgba(59,130,246,0.15) 0%, transparent 50%),
         radial-gradient(ellipse at 50% 80%, rgba(236,72,153,0.1) 0%, transparent 50%),
         #0a0a1a
+      ` : `
+        radial-gradient(ellipse at 20% 50%, rgba(168,85,247,0.08) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 20%, rgba(59,130,246,0.08) 0%, transparent 50%),
+        radial-gradient(ellipse at 50% 80%, rgba(236,72,153,0.05) 0%, transparent 50%),
+        #f1f5f9
       `
     }} />
     <div className="relative z-10">{children}</div>
   </div>
+);
+
+const ThemeToggle: React.FC<{ isDark: boolean; onToggle: () => void }> = ({ isDark, onToggle }) => (
+  <button
+    onClick={onToggle}
+    className="p-3 rounded-xl flex items-center justify-center hover:scale-105 transition-all shadow-md cursor-pointer border border-theme-card bg-theme-card"
+    title={isDark ? "Switch to Light Mode" : "Switch to Dark Mode"}
+  >
+    {isDark ? <Sun className="w-5 h-5" style={{ color: '#eab308' }} /> : <Moon className="w-5 h-5" style={{ color: '#a855f7' }} />}
+  </button>
 );
 
 const GradientText: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className = '' }) => (
@@ -317,20 +397,28 @@ const TypewriterText: React.FC<{ words: string[]; interval: number }> = ({ words
 };
 
 // ==================== HOME SCREEN ====================
-const HomeScreen: React.FC<{ onNavigate: (s: GameScreen) => void; stats: { total: number; games: number } }> = ({ onNavigate, stats }) => {
+const HomeScreen: React.FC<{
+  onNavigate: (s: GameScreen) => void;
+  stats: { total: number; games: number };
+  isDark: boolean;
+  onToggleTheme: () => void;
+}> = ({ onNavigate, stats, isDark, onToggleTheme }) => {
   const words = ['Game', 'Meme', 'Guess'];
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-6 py-12 relative">
-      {/* Corner Admin Button */}
-      <button
-        onClick={() => onNavigate('admin')}
-        className="absolute top-6 right-6 p-3 rounded-xl flex items-center gap-2 hover:scale-105 transition-transform z-50 shadow-lg"
-        style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', backdropFilter: 'blur(10px)' }}
-      >
-        <Settings className="w-5 h-5 text-white/70" />
-        <span className="text-sm font-medium text-white/70 hidden sm:block">Admin</span>
-      </button>
+      {/* Corner Buttons */}
+      <div className="absolute top-6 right-6 flex items-center gap-3 z-50">
+        <ThemeToggle isDark={isDark} onToggle={onToggleTheme} />
+        
+        <button
+          onClick={() => onNavigate('admin')}
+          className="p-3 rounded-xl flex items-center gap-2 hover:scale-105 transition-all shadow-lg cursor-pointer border border-theme-card bg-theme-card"
+        >
+          <Settings className="w-5 h-5" style={{ color: 'var(--text-muted)' }} />
+          <span className="text-sm font-medium hidden sm:block" style={{ color: 'var(--text-muted)' }}>Admin</span>
+        </button>
+      </div>
 
       {[
         { e: '🎮', style: { top: '12%', left: '5%' } },
@@ -359,7 +447,7 @@ const HomeScreen: React.FC<{ onNavigate: (s: GameScreen) => void; stats: { total
             Verse
           </span>
         </h1>
-        <p className="text-lg text-white/50 max-w-md mx-auto font-light">
+        <p className="text-lg max-w-md mx-auto font-light text-white/50">
           The Ultimate Social Gaming Arena — Host, Play & Dominate!
         </p>
       </div>
@@ -369,26 +457,26 @@ const HomeScreen: React.FC<{ onNavigate: (s: GameScreen) => void; stats: { total
           { icon: <Gamepad2 className="w-7 h-7" style={{ color: '#a855f7' }} />, title: 'Play Game', desc: 'Start a new game session', action: () => onNavigate('setup') },
           { icon: <Trophy className="w-7 h-7" style={{ color: '#22c55e' }} />, title: 'Scoreboard', desc: 'View scores & leaders', action: () => onNavigate('scoreboard') },
         ].map((item, i) => (
-          <div key={i} onClick={item.action} className="rounded-2xl p-6 text-center cursor-pointer hover:-translate-y-2 transition-all duration-300"
-            style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', backdropFilter: 'blur(10px)' }}>
-            <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-3" style={{ background: 'rgba(255,255,255,0.05)' }}>
+          <div key={i} onClick={item.action} className="rounded-2xl p-6 text-center cursor-pointer hover:-translate-y-2 transition-all duration-300 border border-theme-card bg-theme-card"
+            style={{ backdropFilter: 'blur(10px)' }}>
+            <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-3" style={{ background: 'var(--input-bg)', border: '1px solid var(--input-border)' }}>
               {item.icon}
             </div>
             <h3 className="font-bold text-lg mb-1">{item.title}</h3>
-            <p className="text-white/40 text-sm">{item.desc}</p>
+            <p className="text-sm text-white/40">{item.desc}</p>
           </div>
         ))}
       </div>
 
       <div className="w-full max-w-3xl">
-        <h2 className="text-center text-white/30 text-xs font-semibold uppercase tracking-widest mb-4">Game Modes Available</h2>
+        <h2 className="text-center text-xs font-semibold uppercase tracking-widest mb-4 text-white/30">Game Modes Available</h2>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {[
             { icon: <MessageSquare className="w-5 h-5" style={{ color: '#a855f7' }} />, title: 'Meme Dialogues', desc: 'Guess the dialogue', bg: 'rgba(168,85,247,0.15)' },
             { icon: <Music className="w-5 h-5" style={{ color: '#ec4899' }} />, title: 'Song Tunes', desc: 'Identify the song', bg: 'rgba(236,72,153,0.15)' },
             { icon: <Film className="w-5 h-5" style={{ color: '#06b6d4' }} />, title: 'Movie Memes', desc: 'Guess the movie', bg: 'rgba(6,182,212,0.15)' },
           ].map((cat, i) => (
-            <div key={i} className="rounded-xl p-4 flex items-center gap-3" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
+            <div key={i} className="rounded-xl p-4 flex items-center gap-3 border border-theme-card bg-theme-card">
               <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: cat.bg }}>
                 {cat.icon}
               </div>
@@ -422,8 +510,16 @@ const HomeScreen: React.FC<{ onNavigate: (s: GameScreen) => void; stats: { total
 };
 
 // ==================== ADMIN SCREEN ====================
-const AdminScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
-  const [content, setContent] = useState<GameContent[]>(loadContent);
+const AdminScreen: React.FC<{
+  content: GameContent[];
+  onRefresh: () => Promise<void>;
+  onBack: () => void;
+  isDark: boolean;
+  onToggleTheme: () => void;
+  onLogout: () => void;
+  adminEmail: string | null;
+}> = ({ content: initialContent, onRefresh, onBack, isDark, onToggleTheme, onLogout, adminEmail }) => {
+  const [content, setContent] = useState<GameContent[]>(initialContent);
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [filter, setFilter] = useState<string>('all');
@@ -443,16 +539,20 @@ const AdminScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     points: 20,
   });
 
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [audioFile, setAudioFile] = useState<File | null>(null);
+
   const [uploading, setUploading] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<GameContent | null>(null);
   const [alertInfo, setAlertInfo] = useState<{ open: boolean; title: string; message: string }>({ open: false, title: '', message: '' });
 
-  const showAlert = (title: string, message: string) => setAlertInfo({ open: true, title, message });
+  useEffect(() => {
+    setContent(initialContent);
+  }, [initialContent]);
 
-  const save = (data: GameContent[]) => {
-    setContent(data);
-    saveContent(data);
-  };
+  const showAlert = (title: string, message: string) => setAlertInfo({ open: true, title, message });
 
   const filtered = content.filter(c => {
     const matchType = filter === 'all' || c.type === filter;
@@ -460,7 +560,7 @@ const AdminScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     return matchType && matchSearch;
   });
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!form.question.trim() || !form.answer.trim()) {
       showAlert('Missing fields', 'Please fill in question and answer!');
       return;
@@ -478,29 +578,110 @@ const AdminScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
       }
     }
 
-    const newItem: GameContent = {
-      id: editId || Date.now().toString(),
-      type: form.type,
-      questionType: form.questionType,
-      question: form.question,
-      answer: form.answer,
-      options: form.questionType === 'multiple-choice' ? form.options.filter(o => o.trim()) : undefined,
-      imageData: form.imageData || undefined,
-      videoData: form.videoData || undefined,
-      audioData: form.audioData || undefined,
-      audioHint: form.audioHint || undefined,
-      difficulty: form.difficulty,
-      points: form.points,
-    };
+    setIsSaving(true);
 
-    if (editId) {
-      save(content.map(c => c.id === editId ? newItem : c));
-    } else {
-      save([newItem, ...content]);
+    try {
+      let imageUrl = form.imageData;
+      let videoUrl = form.videoData;
+      let audioUrl = form.audioData;
+
+      const uploadToStorage = async (file: File, prefix: string) => {
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${prefix}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${fileExt}`;
+        
+        const { data, error } = await supabase.storage
+          .from('game-media')
+          .upload(fileName, file, { cacheControl: '3600', upsert: true });
+
+        if (error) throw error;
+
+        const { data: publicUrlData } = supabase.storage
+          .from('game-media')
+          .getPublicUrl(data.path);
+
+        return publicUrlData.publicUrl;
+      };
+
+      if (imageFile) {
+        imageUrl = await uploadToStorage(imageFile, 'img');
+      }
+      if (videoFile) {
+        videoUrl = await uploadToStorage(videoFile, 'vid');
+      }
+      if (audioFile) {
+        audioUrl = await uploadToStorage(audioFile, 'aud');
+      }
+
+      if (!form.imageData) imageUrl = '';
+      if (!form.videoData) videoUrl = '';
+      if (!form.audioData) audioUrl = '';
+
+      const dbPayload = {
+        type: form.type,
+        question_type: form.questionType,
+        question: form.question,
+        answer: form.answer,
+        options: form.questionType === 'multiple-choice' ? form.options.filter(o => o.trim()) : null,
+        image_url: imageUrl || null,
+        video_url: videoUrl || null,
+        audio_url: audioUrl || null,
+        audio_hint: form.audioHint || null,
+        difficulty: form.difficulty,
+        points: form.points,
+      };
+
+      if (editId) {
+        const originalItem = content.find(c => c.id === editId);
+        if (originalItem) {
+          const filesToDelete: string[] = [];
+          if (originalItem.imageUrl && (imageFile || !form.imageData)) {
+            const name = getFileNameFromUrl(originalItem.imageUrl);
+            if (name) filesToDelete.push(name);
+          }
+          if (originalItem.videoUrl && (videoFile || !form.videoData)) {
+            const name = getFileNameFromUrl(originalItem.videoUrl);
+            if (name) filesToDelete.push(name);
+          }
+          if (originalItem.audioUrl && (audioFile || !form.audioData)) {
+            const name = getFileNameFromUrl(originalItem.audioUrl);
+            if (name) filesToDelete.push(name);
+          }
+
+          if (filesToDelete.length > 0) {
+            await supabase.storage
+              .from('game-media')
+              .remove(filesToDelete);
+          }
+        }
+
+        const { error } = await supabase
+          .from('game_content')
+          .update(dbPayload)
+          .eq('id', editId);
+        
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('game_content')
+          .insert([dbPayload]);
+        
+        if (error) throw error;
+      }
+
+      await onRefresh();
+
+      setForm({ type: 'meme-dialogue', questionType: 'multiple-choice', question: '', answer: '', options: ['', '', '', ''], imageData: '', videoData: '', audioData: '', audioHint: '', difficulty: 'medium', points: 20 });
+      setImageFile(null);
+      setVideoFile(null);
+      setAudioFile(null);
+      setShowForm(false);
+      setEditId(null);
+    } catch (err: any) {
+      console.error('Error saving content:', err);
+      showAlert('Error saving', err.message || 'Failed to save content to Supabase.');
+    } finally {
+      setIsSaving(false);
     }
-    setForm({ type: 'meme-dialogue', questionType: 'multiple-choice', question: '', answer: '', options: ['', '', '', ''], imageData: '', videoData: '', audioData: '', audioHint: '', difficulty: 'medium', points: 20 });
-    setShowForm(false);
-    setEditId(null);
   };
 
   const startEdit = (item: GameContent) => {
@@ -518,6 +699,9 @@ const AdminScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
       difficulty: item.difficulty,
       points: item.points,
     });
+    setImageFile(null);
+    setVideoFile(null);
+    setAudioFile(null);
     setShowForm(true);
   };
 
@@ -532,9 +716,18 @@ const AdminScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     setUploading(type);
     try {
       const base64 = await fileToBase64(file);
-      if (type === 'image') setForm(f => ({ ...f, imageData: base64 }));
-      if (type === 'video') setForm(f => ({ ...f, videoData: base64 }));
-      if (type === 'audio') setForm(f => ({ ...f, audioData: base64 }));
+      if (type === 'image') {
+        setForm(f => ({ ...f, imageData: base64 }));
+        setImageFile(file);
+      }
+      if (type === 'video') {
+        setForm(f => ({ ...f, videoData: base64 }));
+        setVideoFile(file);
+      }
+      if (type === 'audio') {
+        setForm(f => ({ ...f, audioData: base64 }));
+        setAudioFile(file);
+      }
     } catch (err) {
       setAlertInfo({ open: true, title: 'Upload failed', message: 'Could not process the file.' });
     }
@@ -554,31 +747,75 @@ const AdminScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         confirmLabel="Delete"
         destructive
         onCancel={() => setDeleteTarget(null)}
-        onConfirm={() => {
-          if (deleteTarget) save(content.filter(c => c.id !== deleteTarget.id));
+        onConfirm={async () => {
+          if (deleteTarget) {
+            try {
+              const { error } = await supabase
+                .from('game_content')
+                .delete()
+                .eq('id', deleteTarget.id);
+              if (error) throw error;
+
+              const filesToDelete: string[] = [];
+              if (deleteTarget.imageUrl) {
+                const name = getFileNameFromUrl(deleteTarget.imageUrl);
+                if (name) filesToDelete.push(name);
+              }
+              if (deleteTarget.videoUrl) {
+                const name = getFileNameFromUrl(deleteTarget.videoUrl);
+                if (name) filesToDelete.push(name);
+              }
+              if (deleteTarget.audioUrl) {
+                const name = getFileNameFromUrl(deleteTarget.audioUrl);
+                if (name) filesToDelete.push(name);
+              }
+
+              if (filesToDelete.length > 0) {
+                await supabase.storage
+                  .from('game-media')
+                  .remove(filesToDelete);
+              }
+
+              await onRefresh();
+            } catch (err: any) {
+              console.error('Error deleting content:', err);
+              showAlert('Error deleting', err.message || 'Failed to delete content.');
+            }
+          }
           setDeleteTarget(null);
         }}
-      >
-      </ConfirmModal>
+      />
       <AlertModal open={alertInfo.open} title={alertInfo.title} message={alertInfo.message} onOk={() => setAlertInfo({ open: false, title: '', message: '' })} />
       <div className="max-w-4xl mx-auto">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
-            <button onClick={onBack} className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
+            <button onClick={onBack} className="w-10 h-10 rounded-xl flex items-center justify-center border border-theme-card bg-theme-card" style={{ backdropFilter: 'blur(10px)' }}>
               <ArrowLeft className="w-5 h-5" />
             </button>
             <div>
               <h1 className="text-2xl font-bold"><GradientText>Admin Panel</GradientText></h1>
-              <p className="text-white/40 text-sm">Manage your game content</p>
+              <p className="text-white/40 text-sm">
+                {adminEmail ? `Logged in as: ${adminEmail}` : 'Manage your game content'}
+              </p>
             </div>
           </div>
-          <button
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-white border-0 cursor-pointer transition-all hover:opacity-90"
-            style={{ background: 'linear-gradient(135deg, #a855f7, #ec4899)' }}
-            onClick={() => { setShowForm(true); setEditId(null); setForm({ type: 'meme-dialogue', questionType: 'multiple-choice', question: '', answer: '', options: ['', '', '', ''], imageData: '', videoData: '', audioData: '', audioHint: '', difficulty: 'medium', points: 20 }); }}
-          >
-            <Plus className="w-5 h-5" /> Add Content
-          </button>
+          <div className="flex items-center gap-3">
+            <ThemeToggle isDark={isDark} onToggle={onToggleTheme} />
+            <button
+              onClick={onLogout}
+              className="p-3 rounded-xl flex items-center justify-center hover:scale-105 transition-all shadow-md cursor-pointer border border-red-500/20 hover:bg-red-500/10 text-red-400"
+              title="Sign Out"
+            >
+              <LogOut className="w-5 h-5" />
+            </button>
+            <button
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-white border-0 cursor-pointer transition-all hover:opacity-90"
+              style={{ background: 'linear-gradient(135deg, #a855f7, #ec4899)' }}
+              onClick={() => { setShowForm(true); setEditId(null); setForm({ type: 'meme-dialogue', questionType: 'multiple-choice', question: '', answer: '', options: ['', '', '', ''], imageData: '', videoData: '', audioData: '', audioHint: '', difficulty: 'medium', points: 20 }); setImageFile(null); setVideoFile(null); setAudioFile(null); }}
+            >
+              <Plus className="w-5 h-5" /> Add Content
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
@@ -588,7 +825,7 @@ const AdminScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
             { n: content.filter(c => c.type === 'song-tune').length, label: 'Songs', color: '#ec4899' },
             { n: content.filter(c => c.type === 'movie-meme').length, label: 'Movies', color: '#06b6d4' },
           ].map((s, i) => (
-            <div key={i} className="rounded-xl p-4 text-center" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
+            <div key={i} className="rounded-xl p-4 text-center border border-theme-card bg-theme-card">
               <p className="text-2xl font-bold" style={{ color: s.color }}>{s.n}</p>
               <p className="text-xs text-white/40">{s.label}</p>
             </div>
@@ -596,10 +833,10 @@ const AdminScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         </div>
 
         {showForm && (
-          <div className="rounded-2xl p-6 mb-6" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
+          <div className="rounded-2xl p-6 mb-6 border border-theme-card bg-theme-card">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-bold">{editId ? 'Edit Content' : 'Add New Content'}</h2>
-              <button onClick={() => { setShowForm(false); setEditId(null); }} className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.1)' }}>
+              <button onClick={() => { setShowForm(false); setEditId(null); }} className="w-8 h-8 rounded-lg flex items-center justify-center bg-white/10">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -689,7 +926,7 @@ const AdminScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                   {form.imageData && (
                     <div className="mt-2">
                       <img src={form.imageData} alt="preview" className="w-full h-20 object-cover rounded-lg" />
-                      <button onClick={() => setForm(f => ({ ...f, imageData: '' }))} className="text-xs text-red-400 mt-1">Remove</button>
+                      <button onClick={() => { setForm(f => ({ ...f, imageData: '' })); setImageFile(null); }} className="text-xs text-red-400 mt-1">Remove</button>
                     </div>
                   )}
                 </div>
@@ -704,7 +941,7 @@ const AdminScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                   {form.videoData && (
                     <div className="mt-2">
                       <video src={form.videoData} className="w-full h-20 object-cover rounded-lg" />
-                      <button onClick={() => setForm(f => ({ ...f, videoData: '' }))} className="text-xs text-red-400 mt-1">Remove</button>
+                      <button onClick={() => { setForm(f => ({ ...f, videoData: '' })); setVideoFile(null); }} className="text-xs text-red-400 mt-1">Remove</button>
                     </div>
                   )}
                 </div>
@@ -719,7 +956,7 @@ const AdminScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                   {form.audioData && (
                     <div className="mt-2">
                       <audio src={form.audioData} controls className="w-full" />
-                      <button onClick={() => setForm(f => ({ ...f, audioData: '' }))} className="text-xs text-red-400 mt-1">Remove</button>
+                      <button onClick={() => { setForm(f => ({ ...f, audioData: '' })); setAudioFile(null); }} className="text-xs text-red-400 mt-1">Remove</button>
                     </div>
                   )}
                 </div>
@@ -737,14 +974,14 @@ const AdminScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
             )}
 
             <div className="flex gap-3 justify-end">
-              <button className="px-5 py-2.5 rounded-xl font-semibold cursor-pointer transition-all hover:bg-white/10" style={{ background: 'rgba(255,255,255,0.08)', color: 'white' }}
+              <button disabled={isSaving} className="px-5 py-2.5 rounded-xl font-semibold cursor-pointer transition-all hover:bg-white/10" style={{ background: 'rgba(255,255,255,0.08)', color: 'white', opacity: isSaving ? 0.5 : 1 }}
                 onClick={() => { setShowForm(false); setEditId(null); }}>
                 Cancel
               </button>
-              <button className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-white cursor-pointer transition-all hover:opacity-90"
-                style={{ background: 'linear-gradient(135deg, #a855f7, #ec4899)' }}
+              <button disabled={isSaving} className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-white cursor-pointer transition-all hover:opacity-90"
+                style={{ background: 'linear-gradient(135deg, #a855f7, #ec4899)', opacity: isSaving ? 0.7 : 1 }}
                 onClick={handleSubmit}>
-                <Save className="w-4 h-4" /> {editId ? 'Update' : 'Save'}
+                <Save className="w-4 h-4" /> {isSaving ? 'Saving...' : (editId ? 'Update' : 'Save')}
               </button>
             </div>
           </div>
@@ -828,7 +1065,12 @@ const AdminScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 };
 
 // ==================== GAME SETUP ====================
-const GameSetup: React.FC<{ onBack: () => void; onStart: (settings: any) => void }> = ({ onBack, onStart }) => {
+const GameSetup: React.FC<{
+  onBack: () => void;
+  onStart: (settings: any) => void;
+  isDark: boolean;
+  onToggleTheme: () => void;
+}> = ({ onBack, onStart, isDark, onToggleTheme }) => {
   const [mode, setMode] = useState<GameMode>('individual');
   const [teams, setTeams] = useState<Team[]>([]);
   const [players, setPlayers] = useState<Player[]>([]);
@@ -879,14 +1121,17 @@ const GameSetup: React.FC<{ onBack: () => void; onStart: (settings: any) => void
   return (
     <div className="min-h-screen px-4 sm:px-6 py-6">
       <div className="max-w-2xl mx-auto">
-        <div className="flex items-center gap-3 mb-8">
-          <button onClick={onBack} className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-          <div>
-            <h1 className="text-2xl font-bold"><GradientText>Game Setup</GradientText></h1>
-            <p className="text-white/40 text-sm">Configure your game session</p>
+        <div className="flex items-center justify-between mb-8">
+          <div className="flex items-center gap-3">
+            <button onClick={onBack} className="w-10 h-10 rounded-xl flex items-center justify-center border border-theme-card bg-theme-card" style={{ backdropFilter: 'blur(10px)' }}>
+              <ArrowLeft className="w-5 h-5" />
+            </button>
+            <div>
+              <h1 className="text-2xl font-bold"><GradientText>Game Setup</GradientText></h1>
+              <p className="text-white/40 text-sm">Configure your game session</p>
+            </div>
           </div>
+          <ThemeToggle isDark={isDark} onToggle={onToggleTheme} />
         </div>
 
         <div className="rounded-2xl p-6 mb-6" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
@@ -1033,7 +1278,13 @@ const GameSetup: React.FC<{ onBack: () => void; onStart: (settings: any) => void
 };
 
 // ==================== GAME LOBBY ====================
-const GameLobby: React.FC<{ settings: any; onStart: () => void; onBack: () => void }> = ({ settings, onStart, onBack }) => {
+const GameLobby: React.FC<{
+  settings: any;
+  onStart: () => void;
+  onBack: () => void;
+  isDark: boolean;
+  onToggleTheme: () => void;
+}> = ({ settings, onStart, onBack, isDark, onToggleTheme }) => {
   const [countdown, setCountdown] = useState<number | null>(null);
 
   const handleStart = () => setCountdown(3);
@@ -1046,7 +1297,10 @@ const GameLobby: React.FC<{ settings: any; onStart: () => void; onBack: () => vo
   }, [countdown, onStart]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4">
+    <div className="min-h-screen flex items-center justify-center px-4 relative">
+      <div className="absolute top-6 right-6 z-50">
+        <ThemeToggle isDark={isDark} onToggle={onToggleTheme} />
+      </div>
       {countdown !== null && (
         <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(10px)' }}>
           <div style={{ fontSize: '10rem', fontWeight: 900, background: 'linear-gradient(135deg, #a855f7, #ec4899, #3b82f6)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
@@ -1056,7 +1310,7 @@ const GameLobby: React.FC<{ settings: any; onStart: () => void; onBack: () => vo
       )}
       <div className="max-w-xl w-full">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm text-white/60 mb-4" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm text-white/60 mb-4 border border-theme-card bg-theme-card">
             <Zap className="w-4 h-4 text-yellow-400" /> Get Ready to Play!
           </div>
           <h1 className="text-4xl sm:text-5xl font-black mb-2">{settings.mode === 'team' ? '⚔️ Team Battle' : '🎮 Game On!'}</h1>
@@ -1159,7 +1413,7 @@ const GamePlay: React.FC<{
 
   return (
     <div className="min-h-screen flex flex-col px-4 py-4">
-      <div className="max-w-2xl w-full mx-auto relative">
+      <div className="max-w-4xl w-full mx-auto relative">
         <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-xs px-2.5 py-1 rounded-full font-semibold" style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.6)' }}>
@@ -1196,15 +1450,15 @@ const GamePlay: React.FC<{
           </div>
         </div>
 
-        <div className="rounded-2xl p-6 mb-4" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
+        <div className="rounded-2xl p-6 mb-4 border border-theme-card bg-theme-card" style={{ backdropFilter: 'blur(10px)' }}>
           {question.imageData && (
-            <div className="mb-4 rounded-xl overflow-hidden flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.03)' }}>
-              <img src={question.imageData} alt="question" className="max-w-full max-h-[250px] object-contain" />
+            <div className="mb-4 rounded-xl overflow-hidden flex items-center justify-center bg-black/10 border border-theme-card">
+              <img src={question.imageData} alt="question" className="max-w-full max-h-[55vh] object-contain rounded-xl shadow-md" />
             </div>
           )}
           {question.videoData && (
-            <div className="mb-4 rounded-xl overflow-hidden" style={{ background: 'rgba(255,255,255,0.03)' }}>
-              <video src={question.videoData} controls className="w-full max-h-[250px]" />
+            <div className="mb-4 rounded-xl overflow-hidden bg-black/10 border border-theme-card">
+              <video src={question.videoData} controls className="w-full max-h-[55vh] object-contain rounded-xl shadow-md" />
             </div>
           )}
           {question.audioData && (
@@ -1355,14 +1609,19 @@ const Scoreboard: React.FC<{
   onPlayAgain: () => void;
   onNewSetup: () => void;
   onHome: () => void;
-}> = ({ scores, rounds, timePerQ, onPlayAgain, onNewSetup, onHome }) => {
+  isDark: boolean;
+  onToggleTheme: () => void;
+}> = ({ scores, rounds, timePerQ, onPlayAgain, onNewSetup, onHome, isDark, onToggleTheme }) => {
   const totalScore = scores.mode === 'team' ? scores.teams.reduce((s, t) => s + t.score, 0) : scores.players.reduce((s, p) => s + p.score, 0);
   const sorted = scores.mode === 'team' ? [...scores.teams].sort((a, b) => b.score - a.score) : [...scores.players].sort((a, b) => b.score - a.score);
   const winner = sorted.length > 0 ? sorted[0] : null;
   const medal = (i: number) => i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`;
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 py-6">
+    <div className="min-h-screen flex items-center justify-center px-4 py-6 relative">
+      <div className="absolute top-6 right-6 z-50">
+        <ThemeToggle isDark={isDark} onToggle={onToggleTheme} />
+      </div>
       <div className="max-w-xl w-full">
         {winner && (
           <div className="text-center mb-8">
@@ -1428,9 +1687,141 @@ const Scoreboard: React.FC<{
   );
 };
 
+// ==================== ADMIN LOGIN ====================
+const AdminLogin: React.FC<{
+  onLoginSuccess: () => void;
+  onBack: () => void;
+}> = ({ onLoginSuccess, onBack }) => {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim() || !password.trim()) {
+      setError('Please enter both email and password.');
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const { data, error: authErr } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password: password.trim(),
+      });
+      if (authErr) throw authErr;
+      if (data.user) {
+        onLoginSuccess();
+      }
+    } catch (err: any) {
+      setError(err.message || 'Invalid credentials or login failed.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center px-4 py-12 relative">
+      <div className="max-w-md w-full rounded-2xl p-6 sm:p-8 shadow-2xl relative border border-theme-card bg-theme-card"
+        style={{ backdropFilter: 'blur(10px)' }}>
+        
+        {/* Back Button */}
+        <button onClick={onBack} className="absolute top-6 left-6 w-10 h-10 rounded-xl flex items-center justify-center hover:bg-white/10 transition-colors border border-theme-card bg-theme-card">
+          <ArrowLeft className="w-5 h-5" />
+        </button>
+
+        <div className="text-center mt-6 mb-8">
+          <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4 bg-purple-500/10 border border-purple-500/20">
+            <Settings className="w-7 h-7 text-purple-400" />
+          </div>
+          <h1 className="text-3xl font-black mb-2"><GradientText>Admin Login</GradientText></h1>
+          <p className="text-sm text-theme-muted" style={{ color: 'var(--text-muted)' }}>Sign in to manage game content</p>
+        </div>
+
+        {error && (
+          <div className="mb-6 p-4 rounded-xl bg-red-500/15 border border-red-500/30 text-red-200 text-sm">
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="text-xs font-semibold uppercase tracking-wider block mb-1.5" style={{ color: 'var(--text-muted)' }}>Email Address</label>
+            <input
+              type="email"
+              required
+              className="w-full rounded-xl px-4 py-3 outline-none text-sm transition-all focus:border-purple-500 border border-theme-card bg-theme-input"
+              placeholder="admin@example.com"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+            />
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold uppercase tracking-wider block mb-1.5" style={{ color: 'var(--text-muted)' }}>Password</label>
+            <input
+              type="password"
+              required
+              className="w-full rounded-xl px-4 py-3 outline-none text-sm transition-all focus:border-purple-500 border border-theme-card bg-theme-input"
+              placeholder="••••••••"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full py-3.5 rounded-xl font-bold text-white transition-all hover:opacity-95 active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer mt-6"
+            style={{ background: 'linear-gradient(135deg, #a855f7, #ec4899)' }}
+          >
+            {loading ? 'Authenticating...' : 'Sign In'}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+};
+
 // ==================== MAIN APP ====================
 const App: React.FC = () => {
   const [screen, setScreen] = useState<GameScreen>('loading');
+  const [content, setContent] = useState<GameContent[]>([]);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+
+  const [isDark, setIsDark] = useState(() => {
+    try {
+      const stored = localStorage.getItem('gv_theme');
+      return stored ? stored === 'dark' : true;
+    } catch { return true; }
+  });
+
+  const toggleTheme = () => setIsDark(d => !d);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('gv_theme', isDark ? 'dark' : 'light');
+    } catch {}
+  }, [isDark]);
+
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [adminEmail, setAdminEmail] = useState<string | null>(null);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setIsAdmin(!!session);
+      setAdminEmail(session?.user?.email || null);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setIsAdmin(!!session);
+      setAdminEmail(session?.user?.email || null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
   const [gameSettings, setGameSettings] = useState<any>(null);
   const [gameState, setGameState] = useState({
     players: [] as Player[],
@@ -1444,10 +1835,32 @@ const App: React.FC = () => {
 
   const navigate = (s: GameScreen) => setScreen(s);
 
+  const refreshContent = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('game_content')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      if (data) {
+        setContent(data.map(mapFromDb));
+      }
+    } catch (err: any) {
+      console.error('Error fetching game content from Supabase:', err);
+      setFetchError(err.message || 'Failed to load content from Supabase.');
+      setContent(loadContent());
+    }
+  };
+
+  useEffect(() => {
+    refreshContent();
+  }, []);
+
   const handleStartGame = (settings: any) => {
     setGameSettings(settings);
-    const latestContent = loadContent();
-    const filtered = latestContent.filter((c: GameContent) =>
+    const filtered = content.filter((c: GameContent) =>
       settings.categories.includes(c.type) && settings.questionTypes.includes(c.questionType || 'multiple-choice')
     );
     const shuffled = shuffle(filtered).slice(0, settings.rounds);
@@ -1528,8 +1941,14 @@ const App: React.FC = () => {
 
   const [alertInfo, setAlertInfo] = useState<{ open: boolean; title: string; message: string }>({ open: false, title: '', message: '' });
 
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setIsAdmin(false);
+    navigate('home');
+  };
+
   return (
-    <AnimatedBg>
+    <AnimatedBg isDark={isDark}>
       <AlertModal open={alertInfo.open} title={alertInfo.title} message={alertInfo.message} onOk={() => setAlertInfo({ open: false, title: '', message: '' })} />
       <ConfirmModal
         open={showExitConfirm}
@@ -1541,10 +1960,37 @@ const App: React.FC = () => {
         onConfirm={confirmExitGame}
       />
       {screen === 'loading' && <LoadingScreen onComplete={() => setScreen('home')} />}
-      {screen === 'home' && <HomeScreen onNavigate={navigate} stats={{ total: loadContent().length, games: gameStats.gamesPlayed }} />}
-      {screen === 'admin' && <AdminScreen onBack={() => navigate('home')} />}
-      {screen === 'setup' && <GameSetup onBack={() => navigate('home')} onStart={handleStartGame} />}
-      {screen === 'lobby' && gameSettings && <GameLobby settings={gameSettings} onStart={() => setScreen('playing')} onBack={() => navigate('setup')} />}
+      {screen === 'home' && <HomeScreen
+        onNavigate={(s) => {
+          if (s === 'admin') {
+            if (isAdmin) {
+              navigate('admin');
+            } else {
+              navigate('admin-login');
+            }
+          } else {
+            navigate(s);
+          }
+        }}
+        stats={{ total: content.length, games: gameStats.gamesPlayed }}
+        isDark={isDark}
+        onToggleTheme={toggleTheme}
+      />}
+      {screen === 'admin-login' && <AdminLogin
+        onLoginSuccess={() => { setIsAdmin(true); navigate('admin'); }}
+        onBack={() => navigate('home')}
+      />}
+      {screen === 'admin' && <AdminScreen
+        content={content}
+        onRefresh={refreshContent}
+        onBack={() => navigate('home')}
+        isDark={isDark}
+        onToggleTheme={toggleTheme}
+        onLogout={handleLogout}
+        adminEmail={adminEmail}
+      />}
+      {screen === 'setup' && <GameSetup onBack={() => navigate('home')} onStart={handleStartGame} isDark={isDark} onToggleTheme={toggleTheme} />}
+      {screen === 'lobby' && gameSettings && <GameLobby settings={gameSettings} onStart={() => setScreen('playing')} onBack={() => navigate('setup')} isDark={isDark} onToggleTheme={toggleTheme} />}
       {screen === 'playing' && gameState.currentQuestion && (
         <GamePlay question={gameState.currentQuestion} roundNumber={gameState.currentIdx + 1} totalRounds={gameState.questions.length} timePerQ={gameSettings?.timePerQ || 30} onReveal={handleReveal} onExit={() => setShowExitConfirm(true)} />
       )}
@@ -1552,7 +1998,13 @@ const App: React.FC = () => {
         <RevealScreen question={gameState.currentQuestion} roundNumber={gameState.currentIdx + 1} totalRounds={gameState.questions.length} scores={{ players: gameState.players, teams: gameState.teams, mode: gameSettings?.mode || 'individual' }} onNext={handleNext} />
       )}
       {screen === 'scoreboard' && (
-        <Scoreboard scores={{ players: gameState.players, teams: gameState.teams, mode: gameSettings?.mode || 'individual' }} rounds={gameSettings?.rounds || 5} timePerQ={gameSettings?.timePerQ || 30} onPlayAgain={handlePlayAgain} onNewSetup={handleNewSetup} onHome={() => setScreen('home')} />
+        <Scoreboard scores={{ players: gameState.players, teams: gameState.teams, mode: gameSettings?.mode || 'individual' }} rounds={gameSettings?.rounds || 5} timePerQ={gameSettings?.timePerQ || 30} onPlayAgain={handlePlayAgain} onNewSetup={handleNewSetup} onHome={() => setScreen('home')} isDark={isDark} onToggleTheme={toggleTheme} />
+      )}
+      {fetchError && (
+        <div className="fixed bottom-4 left-4 right-4 z-50 p-4 rounded-xl bg-red-500/20 border border-red-500/30 text-red-200 text-sm flex justify-between items-center" style={{ backdropFilter: 'blur(8px)' }}>
+          <span>{fetchError} (Using offline local backup)</span>
+          <button onClick={() => setFetchError(null)} className="text-xs underline ml-2 hover:text-white transition-colors">Dismiss</button>
+        </div>
       )}
     </AnimatedBg>
   );
