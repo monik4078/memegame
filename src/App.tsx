@@ -591,7 +591,7 @@ const AdminScreen: React.FC<{
         
         const { data, error } = await supabase.storage
           .from('game-media')
-          .upload(fileName, file, { cacheControl: '3600', upsert: true });
+          .upload(fileName, file, { cacheControl: '3600' });
 
         if (error) throw error;
 
