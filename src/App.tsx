@@ -4,7 +4,7 @@ import {
   Zap, Users, ArrowLeft, Plus, Edit2, Trash2, Save, X, Upload,
   Search, User, Clock, Check, Play, Eye, RotateCcw,
   Home, Star, LogOut, Mic, Video, Image, FileQuestion,
-  Sun, Moon, Pause
+  Pause
 } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
@@ -115,19 +115,19 @@ function mapFromDb(dbItem: any): GameContent {
 const AnimatedBg: React.FC<{ children: React.ReactNode; isDark: boolean }> = ({ children, isDark }) => (
   <div className="relative min-h-screen transition-colors duration-300"
     style={{
-      background: isDark ? '#0a0a1a' : '#f8fafc',
+      background: isDark ? '#0a0a1a' : '#eef2ff',
       color: isDark ? '#ffffff' : '#0f172a',
       fontFamily: 'system-ui, sans-serif',
       overflow: 'hidden',
-      '--bg-color': isDark ? '#0a0a1a' : '#f8fafc',
+      '--bg-color': isDark ? '#0a0a1a' : '#eef2ff',
       '--text-color': isDark ? '#ffffff' : '#0f172a',
-      '--text-muted': isDark ? 'rgba(255,255,255,0.5)' : 'rgba(15,23,42,0.6)',
-      '--text-very-muted': isDark ? 'rgba(255,255,255,0.3)' : 'rgba(15,23,42,0.35)',
-      '--card-bg': isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.7)',
-      '--card-border': isDark ? 'rgba(255,255,255,0.1)' : 'rgba(168,85,247,0.12)',
-      '--modal-bg': isDark ? 'rgba(18,18,42,0.96)' : 'rgba(255,255,255,0.98)',
-      '--input-bg': isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.03)',
-      '--input-border': isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)',
+      '--text-muted': isDark ? 'rgba(255,255,255,0.5)' : 'rgba(15,23,42,0.65)',
+      '--text-very-muted': isDark ? 'rgba(255,255,255,0.3)' : 'rgba(15,23,42,0.45)',
+      '--card-bg': isDark ? 'rgba(255,255,255,0.05)' : 'rgba(226,232,240,0.95)',
+      '--card-border': isDark ? 'rgba(255,255,255,0.1)' : 'rgba(148,163,184,0.16)',
+      '--modal-bg': isDark ? 'rgba(18,18,42,0.96)' : 'rgba(241,245,249,0.98)',
+      '--input-bg': isDark ? 'rgba(255,255,255,0.06)' : 'rgba(226,232,240,0.88)',
+      '--input-border': isDark ? 'rgba(255,255,255,0.12)' : 'rgba(148,163,184,0.28)',
     } as any}>
     <style>{`
       .text-theme-main { color: var(--text-color) !important; }
@@ -170,16 +170,6 @@ const AnimatedBg: React.FC<{ children: React.ReactNode; isDark: boolean }> = ({ 
     }} />
     <div className="relative z-10">{children}</div>
   </div>
-);
-
-const ThemeToggle: React.FC<{ isDark: boolean; onToggle: () => void }> = ({ isDark, onToggle }) => (
-  <button
-    onClick={onToggle}
-    className="p-3 rounded-xl flex items-center justify-center hover:scale-105 transition-all shadow-md cursor-pointer border border-theme-card bg-theme-card"
-    title={isDark ? "Switch to Light Mode" : "Switch to Dark Mode"}
-  >
-    {isDark ? <Sun className="w-5 h-5" style={{ color: '#eab308' }} /> : <Moon className="w-5 h-5" style={{ color: '#a855f7' }} />}
-  </button>
 );
 
 const GradientText: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className = '' }) => (
@@ -409,8 +399,6 @@ const HomeScreen: React.FC<{
     <div className="min-h-screen flex flex-col items-center justify-center px-6 py-12 relative">
       {/* Corner Buttons */}
       <div className="absolute top-6 right-6 flex items-center gap-3 z-50">
-        <ThemeToggle isDark={isDark} onToggle={onToggleTheme} />
-        
         <button
           onClick={() => onNavigate('admin')}
           className="p-3 rounded-xl flex items-center gap-2 hover:scale-105 transition-all shadow-lg cursor-pointer border border-theme-card bg-theme-card"
@@ -777,6 +765,8 @@ const AdminScreen: React.FC<{
               }
 
               await onRefresh();
+              setShowForm(false);
+              setEditId(null);
             } catch (err: any) {
               console.error('Error deleting content:', err);
               showAlert('Error deleting', err.message || 'Failed to delete content.');
@@ -800,7 +790,6 @@ const AdminScreen: React.FC<{
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <ThemeToggle isDark={isDark} onToggle={onToggleTheme} />
             <button
               onClick={onLogout}
               className="p-3 rounded-xl flex items-center justify-center hover:scale-105 transition-all shadow-md cursor-pointer border border-red-500/20 hover:bg-red-500/10 text-red-400"
@@ -833,15 +822,23 @@ const AdminScreen: React.FC<{
         </div>
 
         {showForm && (
-          <div className="rounded-2xl p-6 mb-6 border border-theme-card bg-theme-card">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold">{editId ? 'Edit Content' : 'Add New Content'}</h2>
-              <button onClick={() => { setShowForm(false); setEditId(null); }} className="w-8 h-8 rounded-lg flex items-center justify-center bg-white/10">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
+          <div className="fixed inset-0 z-50 flex items-center justify-center px-4 py-8">
+            <div
+              className="absolute inset-0 bg-black/65 backdrop-blur-xl"
+              onClick={() => { setShowForm(false); setEditId(null); }}
+            />
+            <div className="relative w-full max-w-5xl overflow-hidden rounded-[32px] border border-white/10 bg-slate-950/95 p-6 shadow-[0_40px_120px_rgba(0,0,0,0.55)] animate-fadeIn">
+              <div className="flex items-start justify-between gap-3 mb-6">
+                <div>
+                  <h2 className="text-2xl font-bold">{editId ? 'Edit Content' : 'Add New Content'}</h2>
+                  <p className="text-sm text-white/50">Background is blurred while editing. Save or delete when ready.</p>
+                </div>
+                <button onClick={() => { setShowForm(false); setEditId(null); }} className="w-10 h-10 rounded-2xl flex items-center justify-center bg-white/10 hover:bg-white/15 transition">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
               <div>
                 <label className="text-sm text-white/60 mb-1 block">Type</label>
                 <select className="w-full rounded-xl px-4 py-3 text-white border-0 outline-none"
@@ -991,17 +988,29 @@ const AdminScreen: React.FC<{
               </div>
             )}
 
-            <div className="flex gap-3 justify-end">
+            <div className="flex flex-wrap items-center gap-3 justify-end">
               <button disabled={isSaving} className="px-5 py-2.5 rounded-xl font-semibold cursor-pointer transition-all hover:bg-white/10" style={{ background: 'rgba(255,255,255,0.08)', color: 'white', opacity: isSaving ? 0.5 : 1 }}
                 onClick={() => { setShowForm(false); setEditId(null); }}>
                 Cancel
               </button>
+              {editId && (
+                <button type="button" className="px-5 py-2.5 rounded-xl font-semibold transition-all hover:bg-red-500/20" style={{ background: 'rgba(239,68,68,0.15)', color: '#fda4af' }}
+                  onClick={() => {
+                    const currentItem = content.find(c => c.id === editId);
+                    if (currentItem) {
+                      setDeleteTarget(currentItem);
+                    }
+                  }}>
+                  Delete
+                </button>
+              )}
               <button disabled={isSaving} className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-white cursor-pointer transition-all hover:opacity-90"
                 style={{ background: 'linear-gradient(135deg, #a855f7, #ec4899)', opacity: isSaving ? 0.7 : 1 }}
                 onClick={handleSubmit}>
                 <Save className="w-4 h-4" /> {isSaving ? 'Saving...' : (editId ? 'Update' : 'Save')}
               </button>
             </div>
+          </div>
           </div>
         )}
 
@@ -1032,47 +1041,63 @@ const AdminScreen: React.FC<{
           </div>
         </div>
 
-        <div className="space-y-3">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {filtered.length === 0 ? (
-            <div className="rounded-2xl p-12 text-center" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
+            <div className="rounded-3xl p-12 text-center" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
               <p className="text-white/40">No content found. Add your first question!</p>
             </div>
           ) : filtered.map(item => (
-            <div key={item.id} className="rounded-2xl p-4 flex items-start gap-4" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
-              <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 text-lg"
-                style={{ background: item.type === 'meme-dialogue' ? 'rgba(168,85,247,0.15)' : item.type === 'song-tune' ? 'rgba(236,72,153,0.15)' : 'rgba(6,182,212,0.15)' }}>
-                {typeEmoji(item.type)}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1 flex-wrap">
-                  <span className="text-xs px-2 py-0.5 rounded-full font-semibold" style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.5)' }}>
-                    {typeLabel(item.type)}
-                  </span>
-                  <span className="text-xs px-2 py-0.5 rounded-full font-semibold" style={{ color: diffColor(item.difficulty) }}>
-                    {item.difficulty}
-                  </span>
-                  <span className="text-xs px-2 py-0.5 rounded-full font-semibold" style={{ background: 'rgba(234,179,8,0.15)', color: '#eab308' }}>
-                    {item.points} pts
-                  </span>
-                  <span className="text-xs px-2 py-0.5 rounded-full font-semibold" style={{ background: item.questionType === 'multiple-choice' ? 'rgba(59,130,246,0.15)' : 'rgba(34,197,94,0.15)', color: item.questionType === 'multiple-choice' ? '#3b82f6' : '#22c55e' }}>
-                    {item.questionType === 'multiple-choice' ? '📋 MC' : '✍️ Open'}
-                  </span>
+            <div key={item.id} className="rounded-3xl border border-theme-card bg-theme-card p-5 shadow-[0_24px_80px_rgba(15,23,42,0.08)] transition-transform duration-300 hover:-translate-y-1">
+              <div className="flex items-start justify-between gap-3 mb-4">
+                <div className={`min-w-[44px] min-h-[44px] rounded-2xl flex items-center justify-center text-lg ${item.type === 'meme-dialogue' ? 'bg-purple-500/15 text-purple-300' : item.type === 'song-tune' ? 'bg-pink-500/15 text-pink-300' : 'bg-cyan-500/15 text-cyan-300'}`}>
+                  {typeEmoji(item.type)}
                 </div>
-                <p className="text-sm font-medium truncate">{item.question}</p>
-                <p className="text-xs text-white/30 mt-1">Answer: <span style={{ color: '#22c55e' }}>{item.answer}</span></p>
-                <div className="flex items-center gap-2 mt-2">
-                  {item.imageData && <span className="text-xs px-2 py-0.5 rounded bg-purple-500/20 text-purple-400">🖼️ Image</span>}
-                  {item.videoData && <span className="text-xs px-2 py-0.5 rounded bg-pink-500/20 text-pink-400">🎬 Video</span>}
-                  {item.audioData && <span className="text-xs px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-400">🎵 Audio</span>}
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs px-2 py-1 rounded-full" style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.75)' }}>{typeLabel(item.type)}</span>
+                  <span className="text-xs px-2 py-1 rounded-full" style={{ background: 'rgba(255,255,255,0.08)', color: diffColor(item.difficulty) }}>{item.difficulty}</span>
                 </div>
               </div>
-              <div className="flex items-center gap-2 flex-shrink-0">
-                <button onClick={() => startEdit(item)} className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors hover:bg-white/10" style={{ background: 'rgba(255,255,255,0.05)' }}>
-                  <Edit2 className="w-4 h-4 text-white/40" />
-                </button>
-                <button onClick={() => setDeleteTarget(item)} className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors hover:bg-red-500/20" style={{ background: 'rgba(239,68,68,0.1)' }}>
-                  <Trash2 className="w-4 h-4 text-red-400" />
-                </button>
+
+              {item.imageUrl || item.imageData ? (
+                <div className="mb-4 overflow-hidden rounded-3xl border border-white/10">
+                  <img src={item.imageUrl || item.imageData} alt="Content preview" className="h-44 w-full object-cover" />
+                </div>
+              ) : null}
+              <h3 className="text-sm font-semibold text-white/90 mb-3 break-words">{item.question}</h3>
+              <div className="space-y-3 text-sm text-white/70">
+                <div className="rounded-2xl bg-white/5 p-3">
+                  <div className="text-[11px] uppercase tracking-[0.18em] text-white/40 mb-1">Correct answer</div>
+                  <div className="text-white/90">{item.answer}</div>
+                </div>
+                {item.questionType === 'multiple-choice' && item.options?.length ? (
+                  <div className="rounded-2xl bg-white/5 p-3">
+                    <div className="text-[11px] uppercase tracking-[0.18em] text-white/40 mb-2">Options</div>
+                    <div className="flex flex-wrap gap-2">
+                      {item.options.map((opt, idx) => (
+                        <span key={idx} className={`rounded-full px-3 py-1 text-[11px] ${opt === item.answer ? 'bg-green-500/20 text-green-200' : 'bg-white/10 text-white/60'}`}>{opt}</span>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+                {item.type === 'song-tune' && item.audioHint ? (
+                  <div className="rounded-2xl bg-white/5 p-3">
+                    <div className="text-[11px] uppercase tracking-[0.18em] text-white/40 mb-1">Audio hint</div>
+                    <div>{item.audioHint}</div>
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="mt-5 flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-white/10">
+                <div className="flex flex-wrap gap-2">
+                  <span className="text-xs px-2 py-1 rounded-full" style={{ background: 'rgba(234,179,8,0.15)', color: '#eab308' }}>{item.points} pts</span>
+                  {item.imageData && <span className="text-xs px-2 py-1 rounded-full bg-purple-500/15 text-purple-200">🖼️ Image</span>}
+                  {item.videoData && <span className="text-xs px-2 py-1 rounded-full bg-pink-500/15 text-pink-200">🎬 Video</span>}
+                  {item.audioData && <span className="text-xs px-2 py-1 rounded-full bg-cyan-500/15 text-cyan-200">🎵 Audio</span>}
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => startEdit(item)} className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/80 hover:bg-white/10 transition">Edit</button>
+                  <button onClick={() => setDeleteTarget(item)} className="rounded-2xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-200 hover:bg-red-500/20 transition">Delete</button>
+                </div>
               </div>
             </div>
           ))}
@@ -1157,7 +1182,6 @@ const GameSetup: React.FC<{
               <p className="text-white/40 text-sm">Configure your game session</p>
             </div>
           </div>
-          <ThemeToggle isDark={isDark} onToggle={onToggleTheme} />
         </div>
 
         <div className="rounded-2xl p-6 mb-6" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
@@ -1356,9 +1380,6 @@ const GameLobby: React.FC<{
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4 relative">
-      <div className="absolute top-6 right-6 z-50">
-        <ThemeToggle isDark={isDark} onToggle={onToggleTheme} />
-      </div>
       {countdown !== null && (
         <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(10px)' }}>
           <div style={{ fontSize: '10rem', fontWeight: 900, background: 'linear-gradient(135deg, #a855f7, #ec4899, #3b82f6)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
@@ -1705,9 +1726,6 @@ const Scoreboard: React.FC<{
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4 py-6 relative">
-      <div className="absolute top-6 right-6 z-50">
-        <ThemeToggle isDark={isDark} onToggle={onToggleTheme} />
-      </div>
       <div className="max-w-xl w-full">
         {winner && (
           <div className="text-center mb-8">
@@ -1876,20 +1894,8 @@ const App: React.FC = () => {
   const [content, setContent] = useState<GameContent[]>([]);
   const [fetchError, setFetchError] = useState<string | null>(null);
 
-  const [isDark, setIsDark] = useState(() => {
-    try {
-      const stored = localStorage.getItem('gv_theme');
-      return stored ? stored === 'dark' : true;
-    } catch { return true; }
-  });
-
-  const toggleTheme = () => setIsDark(d => !d);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('gv_theme', isDark ? 'dark' : 'light');
-    } catch {}
-  }, [isDark]);
+  const [isDark] = useState(true);
+  const toggleTheme = () => {};
 
   const [isAdmin, setIsAdmin] = useState(false);
   const [adminEmail, setAdminEmail] = useState<string | null>(null);

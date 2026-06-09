@@ -248,7 +248,7 @@ const AdminDashboard: React.FC = () => {
         </div>
 
         {/* Content List */}
-        <div className="space-y-3 animate-slideUp">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 animate-slideUp">
           {filteredContent.length === 0 ? (
             <div className="game-card p-12 text-center">
               <Upload className="w-12 h-12 text-white/20 mx-auto mb-3" />
@@ -256,30 +256,61 @@ const AdminDashboard: React.FC = () => {
             </div>
           ) : (
             filteredContent.map((item: GameContent, idx: number) => (
-              <div key={item.id} className="game-card p-4 flex items-start gap-4 animate-slideIn" style={{ animationDelay: `${idx * 0.05}s` }}>
-                <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                  item.type === 'meme-dialogue' ? 'bg-neon-purple/20 text-neon-purple' :
-                  item.type === 'song-tune' ? 'bg-neon-pink/20 text-neon-pink' :
-                  'bg-neon-cyan/20 text-neon-cyan'
-                }`}>
-                  {getTypeIcon(item.type)}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
+              <div key={item.id}
+                className="rounded-3xl border border-theme-card bg-theme-card p-5 shadow-[0_18px_60px_rgba(15,23,42,0.08)] transition-transform duration-300 hover:-translate-y-1 animate-slideIn"
+                style={{ animationDelay: `${idx * 0.05}s` }}>
+                <div className="flex items-start justify-between gap-3 mb-4">
+                  <div className={`min-w-[44px] min-h-[44px] rounded-2xl flex items-center justify-center ${
+                    item.type === 'meme-dialogue' ? 'bg-neon-purple/20 text-neon-purple' :
+                    item.type === 'song-tune' ? 'bg-neon-pink/20 text-neon-pink' :
+                    'bg-neon-cyan/20 text-neon-cyan'
+                  }`}>
+                    {getTypeIcon(item.type)}
+                  </div>
+                  <div className="flex flex-col items-end gap-2">
                     <span className="badge bg-white/10 text-white/60">{getTypeLabel(item.type)}</span>
                     <span className={`badge ${getDifficultyColor(item.difficulty)}`}>{item.difficulty}</span>
-                    <span className="badge bg-neon-yellow/20 text-neon-yellow">{item.points} pts</span>
                   </div>
-                  <p className="text-sm font-medium truncate">{item.question}</p>
-                  <p className="text-xs text-white/30 mt-1">Answer: <span className="text-neon-green/70">{item.answer}</span></p>
                 </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  <button onClick={() => startEdit(item)} className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center hover:bg-white/10 transition-colors text-white/40 hover:text-white/80">
-                    <Edit2 className="w-4 h-4" />
-                  </button>
-                  <button onClick={() => { if (confirm('Delete this content?')) deleteContent(item.id); }} className="w-8 h-8 rounded-lg bg-red-500/10 flex items-center justify-center hover:bg-red-500/20 transition-colors text-red-400 hover:text-red-300">
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+
+                <h3 className="text-base font-semibold text-white/90 mb-3 break-words">{item.question}</h3>
+                <div className="text-sm text-white/60 space-y-3">
+                  <div>
+                    <div className="text-xs uppercase tracking-[0.12em] text-white/40 mb-1">Correct answer</div>
+                    <div className="rounded-2xl bg-white/5 px-3 py-2 text-white/80">{item.answer}</div>
+                  </div>
+
+                  {item.options?.length ? (
+                    <div>
+                      <div className="text-xs uppercase tracking-[0.12em] text-white/40 mb-2">Options</div>
+                      <div className="flex flex-wrap gap-2">
+                        {item.options.map((opt, oidx) => (
+                          <span key={oidx} className={`rounded-full px-3 py-1 text-xs ${opt === item.answer ? 'bg-neon-green/15 text-neon-green' : 'bg-white/10 text-white/60'}`}>
+                            {opt}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {item.type === 'song-tune' && item.audioHint ? (
+                    <div>
+                      <div className="text-xs uppercase tracking-[0.12em] text-white/40 mb-1">Hint</div>
+                      <div className="rounded-2xl bg-white/5 px-3 py-2 text-white/80">{item.audioHint}</div>
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="mt-5 flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-white/10">
+                  <span className="badge bg-neon-yellow/20 text-neon-yellow">{item.points} pts</span>
+                  <div className="flex gap-2">
+                    <button onClick={() => startEdit(item)} className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/80 hover:bg-white/10 transition">
+                      Edit
+                    </button>
+                    <button onClick={() => { if (confirm('Delete this content?')) deleteContent(item.id); }} className="rounded-2xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-200 hover:bg-red-500/20 transition">
+                      Delete
+                    </button>
+                  </div>
                 </div>
               </div>
             ))
