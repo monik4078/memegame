@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
+
 // ==================== TYPES ====================
 type ContentType = 'meme-dialogue' | 'song-tune' | 'movie-meme';
 type GameMode = 'individual' | 'team';
@@ -46,6 +47,78 @@ const SAMPLE_CONTENT: GameContent[] = [];
 
 const TEAM_COLORS = ['#a855f7', '#ec4899', '#3b82f6', '#22c55e', '#f97316', '#06b6d4', '#eab308', '#ef4444'];
 const TEAM_EMOJIS = ['🦁', '🐉', '🦅', '🐺', '🦊', '🐯', '🦈', '🐙'];
+
+// ==================== GAMEVERSE LOGO SVG ====================
+const GameVerseLogo: React.FC<{ size?: number; className?: string; style?: React.CSSProperties }> = ({ size = 80, className = '', style }) => (
+  <svg width={size} height={size} viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg" className={className} style={style}>
+    <defs>
+      <radialGradient id="gvBg" cx="50%" cy="50%" r="50%">
+        <stop offset="0%" stopColor="#6d28d9" />
+        <stop offset="100%" stopColor="#1e0a4a" />
+      </radialGradient>
+      <linearGradient id="gvPad" x1="60" y1="55" x2="140" y2="120" gradientUnits="userSpaceOnUse">
+        <stop offset="0%" stopColor="#a78bfa" />
+        <stop offset="50%" stopColor="#7c3aed" />
+        <stop offset="100%" stopColor="#4c1d95" />
+      </linearGradient>
+      <linearGradient id="gvOrbit" x1="30" y1="95" x2="170" y2="105" gradientUnits="userSpaceOnUse">
+        <stop offset="0%" stopColor="#06b6d4" />
+        <stop offset="50%" stopColor="#a855f7" />
+        <stop offset="100%" stopColor="#ec4899" />
+      </linearGradient>
+      <linearGradient id="gvGame" x1="40" y1="150" x2="160" y2="150" gradientUnits="userSpaceOnUse">
+        <stop offset="0%" stopColor="#38bdf8" />
+        <stop offset="100%" stopColor="#818cf8" />
+      </linearGradient>
+      <linearGradient id="gvVerse" x1="55" y1="170" x2="145" y2="170" gradientUnits="userSpaceOnUse">
+        <stop offset="0%" stopColor="#a78bfa" />
+        <stop offset="100%" stopColor="#f472b6" />
+      </linearGradient>
+      <filter id="gvGlow">
+        <feGaussianBlur stdDeviation="2.5" result="blur" />
+        <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+      </filter>
+    </defs>
+    {/* Background circle */}
+    <circle cx="100" cy="95" r="52" fill="url(#gvBg)" />
+    {/* Orbit ring - back half */}
+    <ellipse cx="100" cy="97" rx="60" ry="16" stroke="url(#gvOrbit)" strokeWidth="4" fill="none" strokeDasharray="188" strokeDashoffset="94" opacity="0.7" />
+    {/* Gamepad body */}
+    <rect x="67" y="68" width="66" height="42" rx="18" fill="url(#gvPad)" filter="url(#gvGlow)" />
+    {/* D-pad vertical */}
+    <rect x="80" y="79" width="5" height="14" rx="2" fill="#1e0a4a" />
+    {/* D-pad horizontal */}
+    <rect x="75" y="84" width="15" height="5" rx="2" fill="#1e0a4a" />
+    {/* ABXY buttons */}
+    <circle cx="118" cy="83" r="3.5" fill="#ec4899" opacity="0.9" />
+    <circle cx="125" cy="88" r="3.5" fill="#a855f7" opacity="0.9" />
+    <circle cx="118" cy="93" r="3.5" fill="#3b82f6" opacity="0.9" />
+    <circle cx="111" cy="88" r="3.5" fill="#22c55e" opacity="0.9" />
+    {/* Left analog bump */}
+    <ellipse cx="82" cy="105" rx="7" ry="5" fill="#4c1d95" />
+    {/* Right analog bump */}
+    <ellipse cx="116" cy="105" rx="7" ry="5" fill="#4c1d95" />
+    {/* Center button */}
+    <circle cx="100" cy="88" r="4" fill="#6d28d9" stroke="#a78bfa" strokeWidth="1" />
+    {/* Orbit ring - front half */}
+    <ellipse cx="100" cy="97" rx="60" ry="16" stroke="url(#gvOrbit)" strokeWidth="4" fill="none" strokeDasharray="188" strokeDashoffset="-94" />
+    {/* Pixel dots top-left */}
+    <rect x="57" y="58" width="5" height="5" rx="1" fill="#a855f7" opacity="0.9" />
+    <rect x="63" y="52" width="4" height="4" rx="1" fill="#7c3aed" opacity="0.7" />
+    <rect x="57" y="50" width="3" height="3" rx="0.5" fill="#c084fc" opacity="0.6" />
+    <rect x="53" y="63" width="3" height="3" rx="0.5" fill="#a855f7" opacity="0.5" />
+    {/* Sparkle star top-right */}
+    <path d="M148 48 L150.5 55 L158 55 L152 59.5 L154.5 67 L148 62.5 L141.5 67 L144 59.5 L138 55 L145.5 55 Z" fill="#f9a8d4" filter="url(#gvGlow)" opacity="0.95" />
+    {/* Small star dots */}
+    <circle cx="130" cy="60" r="1.5" fill="white" opacity="0.8" />
+    <circle cx="115" cy="52" r="1" fill="white" opacity="0.6" />
+    <circle cx="138" cy="75" r="1" fill="white" opacity="0.5" />
+    {/* GAME text */}
+    <text x="100" y="152" textAnchor="middle" fontFamily="Arial Black, Arial, sans-serif" fontWeight="900" fontSize="22" fill="url(#gvGame)" letterSpacing="2">GAME</text>
+    {/* VERSE text */}
+    <text x="100" y="172" textAnchor="middle" fontFamily="Arial Black, Arial, sans-serif" fontWeight="900" fontSize="18" fill="url(#gvVerse)" letterSpacing="3">VERSE</text>
+  </svg>
+);
 
 // ==================== HELPERS ====================
 function shuffle<T>(arr: T[]): T[] {
@@ -281,25 +354,17 @@ const LoadingScreen: React.FC<{ onComplete: () => void }> = ({ onComplete }) => 
       }} />
 
       <div className="text-center relative z-10">
-        <div className="mb-8" style={{ transform: logoBounce ? 'scale(1.05)' : 'scale(1)', transition: 'transform 0.6s ease' }}>
-          <div className="relative inline-block">
-            <div className="text-8xl sm:text-9xl font-black mb-2">
-              <span style={{
-                background: 'linear-gradient(135deg, #a855f7, #ec4899)',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-                backgroundClip: 'text',
-              }}>G</span>
-              <span style={{
-                background: 'linear-gradient(135deg, #ec4899, #3b82f6)',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-                backgroundClip: 'text',
-              }}>V</span>
-            </div>
-            <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 text-sm text-white/40 tracking-widest">
-              GAMEVERSE
-            </div>
+        <div className="mb-6 flex justify-center">
+          <GameVerseLogo
+            size={160}
+            style={{
+              animation: 'logoEntrance 1.2s cubic-bezier(0.34, 1.56, 0.64, 1) forwards, logoGlowPulse 3s ease-in-out infinite 1.2s'
+            }}
+          />
+        </div>
+        <div className="mb-8">
+          <div className="text-xl sm:text-2xl font-bold tracking-[0.2em] text-white uppercase" style={{ textShadow: '0 2px 10px rgba(168,85,247,0.3)' }}>
+            GAMEVERSE
           </div>
         </div>
 
@@ -327,7 +392,18 @@ const LoadingScreen: React.FC<{ onComplete: () => void }> = ({ onComplete }) => 
             />
           ))}
         </div>
-        <style>{`@keyframes pulse { 0%, 100% { opacity: 0.3; transform: scale(0.8); } 50% { opacity: 1; transform: scale(1.2); } }`}</style>
+        <style>{`
+          @keyframes pulse { 0%, 100% { opacity: 0.3; transform: scale(0.8); } 50% { opacity: 1; transform: scale(1.2); } }
+          @keyframes logoEntrance {
+            0% { opacity: 0; transform: scale(0.3) rotate(-15deg); }
+            70% { opacity: 0.8; transform: scale(1.1) rotate(3deg); }
+            100% { opacity: 1; transform: scale(1) rotate(0deg); }
+          }
+          @keyframes logoGlowPulse {
+            0%, 100% { transform: translateY(0px) scale(1); filter: drop-shadow(0 0 15px rgba(168, 85, 247, 0.4)); }
+            50% { transform: translateY(-8px) scale(1.03); filter: drop-shadow(0 0 30px rgba(236, 72, 153, 0.7)); }
+          }
+        `}</style>
       </div>
     </div>
   );
@@ -423,6 +499,14 @@ const HomeScreen: React.FC<{
       ))}
 
       <div className="text-center mb-12">
+        <div className="flex justify-center mb-4">
+          <GameVerseLogo
+            size={110}
+            style={{
+              animation: 'logoEntrance 1s cubic-bezier(0.34, 1.56, 0.64, 1) forwards, logoFloat 6s ease-in-out infinite 1s'
+            }}
+          />
+        </div>
         <h1 className="text-5xl sm:text-7xl font-black mb-3">
           <TypewriterText words={words} interval={2500} />
           <span style={{
@@ -490,6 +574,10 @@ const HomeScreen: React.FC<{
 
       <style>{`
         @keyframes float { 0%, 100% { transform: translateY(0px) rotate(0deg); } 50% { transform: translateY(-20px) rotate(10deg); } }
+        @keyframes logoFloat {
+          0%, 100% { transform: translateY(0px) scale(1); filter: drop-shadow(0 0 10px rgba(168, 85, 247, 0.2)); }
+          50% { transform: translateY(-10px) scale(1.02); filter: drop-shadow(0 0 20px rgba(236, 72, 153, 0.4)); }
+        }
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
       `}</style>
@@ -539,6 +627,17 @@ const AdminScreen: React.FC<{
   useEffect(() => {
     setContent(initialContent);
   }, [initialContent]);
+
+  useEffect(() => {
+    if (showForm) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [showForm]);
 
   const showAlert = (title: string, message: string) => setAlertInfo({ open: true, title, message });
 
@@ -782,6 +881,7 @@ const AdminScreen: React.FC<{
             <button onClick={onBack} className="w-10 h-10 rounded-xl flex items-center justify-center border border-theme-card bg-theme-card" style={{ backdropFilter: 'blur(10px)' }}>
               <ArrowLeft className="w-5 h-5" />
             </button>
+            <GameVerseLogo size={36} />
             <div>
               <h1 className="text-2xl font-bold"><GradientText>Admin Panel</GradientText></h1>
               <p className="text-white/40 text-sm">
@@ -822,195 +922,200 @@ const AdminScreen: React.FC<{
         </div>
 
         {showForm && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center px-4 py-8">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
             <div
               className="absolute inset-0 bg-black/65 backdrop-blur-xl"
               onClick={() => { setShowForm(false); setEditId(null); }}
             />
-            <div className="relative w-full max-w-5xl overflow-hidden rounded-[32px] border border-white/10 bg-slate-950/95 p-6 shadow-[0_40px_120px_rgba(0,0,0,0.55)] animate-fadeIn">
-              <div className="flex items-start justify-between gap-3 mb-6">
+            <div className="relative w-full max-w-4xl max-h-[90vh] overflow-hidden rounded-[24px] sm:rounded-[32px] border border-white/10 bg-slate-950/95 shadow-[0_40px_120px_rgba(0,0,0,0.55)] flex flex-col animate-fadeIn">
+              {/* Sticky Header */}
+              <div className="flex items-start justify-between gap-3 p-5 sm:p-6 border-b border-white/10 flex-shrink-0">
                 <div>
-                  <h2 className="text-2xl font-bold">{editId ? 'Edit Content' : 'Add New Content'}</h2>
-                  <p className="text-sm text-white/50">Background is blurred while editing. Save or delete when ready.</p>
+                  <h2 className="text-xl sm:text-2xl font-bold">{editId ? 'Edit Content' : 'Add New Content'}</h2>
+                  <p className="text-xs sm:text-sm text-white/50">Background is locked while editing. Save or delete when ready.</p>
                 </div>
-                <button onClick={() => { setShowForm(false); setEditId(null); }} className="w-10 h-10 rounded-2xl flex items-center justify-center bg-white/10 hover:bg-white/15 transition">
+                <button onClick={() => { setShowForm(false); setEditId(null); }} className="w-10 h-10 rounded-2xl flex items-center justify-center bg-white/10 hover:bg-white/15 transition flex-shrink-0">
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
-              <div>
-                <label className="text-sm text-white/60 mb-1 block">Type</label>
-                <select className="w-full rounded-xl px-4 py-3 text-white border-0 outline-none"
-                  style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}
-                  value={form.type} onChange={e => setForm({ ...form, type: e.target.value as ContentType })}>
-                  <option value="meme-dialogue" style={{ background: '#1a1a2e' }}>💬 Meme Dialogue</option>
-                  <option value="song-tune" style={{ background: '#1a1a2e' }}>🎵 Song Tune</option>
-                  <option value="movie-meme" style={{ background: '#1a1a2e' }}>🎬 Movie Meme</option>
-                </select>
-              </div>
-              <div>
-                <label className="text-sm text-white/60 mb-1 block">Question Type</label>
-                <select className="w-full rounded-xl px-4 py-3 text-white border-0 outline-none"
-                  style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}
-                  value={form.questionType} onChange={e => setForm({ ...form, questionType: e.target.value as QuestionType })}>
-                  <option value="multiple-choice" style={{ background: '#1a1a2e' }}>📋 Multiple Choice</option>
-                  <option value="open-ended" style={{ background: '#1a1a2e' }}>✍️ Open Ended</option>
-                </select>
-              </div>
-              <div>
-                <label className="text-sm text-white/60 mb-1 block">Difficulty</label>
-                <select className="w-full rounded-xl px-4 py-3 text-white border-0 outline-none"
-                  style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}
-                  value={form.difficulty} onChange={e => {
-                    const d = e.target.value as 'easy' | 'medium' | 'hard';
-                    setForm({ ...form, difficulty: d, points: d === 'easy' ? 10 : d === 'medium' ? 20 : 30 });
-                  }}>
-                  <option value="easy" style={{ background: '#1a1a2e' }}>😊 Easy (10 pts)</option>
-                  <option value="medium" style={{ background: '#1a1a2e' }}>🤔 Medium (20 pts)</option>
-                  <option value="hard" style={{ background: '#1a1a2e' }}>🔥 Hard (30 pts)</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="mb-4">
-              <label className="text-sm text-white/60 mb-1.5 block">Question</label>
-              <div className="flex flex-wrap gap-2 mb-2">
-                {[
-                  form.type === 'meme-dialogue' ? 'Guess the dialogue' : form.type === 'song-tune' ? 'Guess the song' : 'Guess the movie name',
-                  form.type === 'meme-dialogue' ? 'What is being said here?' : form.type === 'song-tune' ? 'Name this song' : 'Name this movie',
-                  form.type === 'meme-dialogue' ? 'Complete the dialogue' : form.type === 'song-tune' ? 'Identify the song' : 'Which movie is this from?',
-                  'What is this?',
-                ].map((suggestion) => (
-                  <button
-                    key={suggestion}
-                    type="button"
-                    onClick={() => setForm({ ...form, question: suggestion })}
-                    className="text-xs px-3 py-1.5 rounded-full transition-all hover:scale-105 cursor-pointer"
-                    style={{ background: form.question === suggestion ? 'rgba(168,85,247,0.25)' : 'rgba(255,255,255,0.06)', border: `1px solid ${form.question === suggestion ? 'rgba(168,85,247,0.6)' : 'rgba(255,255,255,0.12)'}`, color: form.question === suggestion ? '#c084fc' : 'rgba(255,255,255,0.6)' }}
-                  >
-                    {suggestion}
-                  </button>
-                ))}
-              </div>
-              <textarea className="w-full rounded-xl px-4 py-3 text-white outline-none" rows={2}
-                style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}
-                placeholder="Enter a custom question or pick a suggestion above..." value={form.question} onChange={e => setForm({ ...form, question: e.target.value })} />
-            </div>
-
-            <div className="mb-4">
-              <label className="text-sm text-white/60 mb-1 block">Correct Answer</label>
-              <input className="w-full rounded-xl px-4 py-3 text-white outline-none"
-                style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}
-                placeholder="The correct answer" value={form.answer} onChange={e => setForm({ ...form, answer: e.target.value })} />
-            </div>
-
-            {form.questionType === 'multiple-choice' && (
-              <div className="mb-4">
-                <label className="text-sm text-white/60 mb-1 block">Options (include the correct answer)</label>
-                {form.options.map((opt, i) => (
-                  <div key={i} className="flex items-center gap-2 mb-2">
-                    <span className="text-xs text-white/30 w-5">{i + 1}.</span>
-                    <input className="flex-1 rounded-xl px-4 py-2.5 text-white outline-none text-sm"
+              {/* Scrollable Form Body */}
+              <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div>
+                    <label className="text-sm text-white/60 mb-1 block">Type</label>
+                    <select className="w-full rounded-xl px-4 py-3 text-white border-0 outline-none"
                       style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}
-                      placeholder={`Option ${i + 1}`} value={opt} onChange={e => {
-                        const opts = [...form.options];
-                        opts[i] = e.target.value;
-                        setForm({ ...form, options: opts });
-                      }} />
-                    <button className={`text-xs px-3 py-1.5 rounded-lg transition-all ${form.answer === opt ? 'text-green-400 font-bold' : 'text-white/30'}`}
-                      style={{ background: form.answer === opt ? 'rgba(34,197,94,0.15)' : 'rgba(255,255,255,0.05)' }}
-                      onClick={() => setForm({ ...form, answer: opt })}>
-                      {form.answer === opt ? '✓ Answer' : 'Set Answer'}
-                    </button>
+                      value={form.type} onChange={e => setForm({ ...form, type: e.target.value as ContentType })}>
+                      <option value="meme-dialogue" style={{ background: '#1a1a2e' }}>💬 Meme Dialogue</option>
+                      <option value="song-tune" style={{ background: '#1a1a2e' }}>🎵 Song Tune</option>
+                      <option value="movie-meme" style={{ background: '#1a1a2e' }}>🎬 Movie Meme</option>
+                    </select>
                   </div>
-                ))}
-              </div>
-            )}
-
-            <div className="mb-4">
-              <label className="text-sm text-white/60 mb-2 block">Upload Media (Optional)</label>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="rounded-xl p-4 text-center" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                  <Image className="w-6 h-6 mx-auto mb-2" style={{ color: '#a855f7' }} />
-                  <p className="text-xs text-white/40 mb-2">Image (max 5MB)</p>
-                  <label className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-xs cursor-pointer" style={{ background: 'rgba(168,85,247,0.15)', color: '#a855f7' }}>
-                    <Upload className="w-3 h-3" /> {form.imageData ? 'Replace' : 'Upload'}
-                    <input type="file" accept="image/*" onChange={e => handleFileUpload('image', e)} className="hidden" />
-                  </label>
-                  {form.imageData && (
-                    <div className="mt-2">
-                      <img src={form.imageData} alt="preview" className="w-full h-20 object-cover rounded-lg" />
-                      <button onClick={() => { setForm(f => ({ ...f, imageData: '' })); setImageFile(null); }} className="text-xs text-red-400 mt-1">Remove</button>
-                    </div>
-                  )}
+                  <div>
+                    <label className="text-sm text-white/60 mb-1 block">Question Type</label>
+                    <select className="w-full rounded-xl px-4 py-3 text-white border-0 outline-none"
+                      style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}
+                      value={form.questionType} onChange={e => setForm({ ...form, questionType: e.target.value as QuestionType })}>
+                      <option value="multiple-choice" style={{ background: '#1a1a2e' }}>📋 Multiple Choice</option>
+                      <option value="open-ended" style={{ background: '#1a1a2e' }}>✍️ Open Ended</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-sm text-white/60 mb-1 block">Difficulty</label>
+                    <select className="w-full rounded-xl px-4 py-3 text-white border-0 outline-none"
+                      style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}
+                      value={form.difficulty} onChange={e => {
+                        const d = e.target.value as 'easy' | 'medium' | 'hard';
+                        setForm({ ...form, difficulty: d, points: d === 'easy' ? 10 : d === 'medium' ? 20 : 30 });
+                      }}>
+                      <option value="easy" style={{ background: '#1a1a2e' }}>😊 Easy (10 pts)</option>
+                      <option value="medium" style={{ background: '#1a1a2e' }}>🤔 Medium (20 pts)</option>
+                      <option value="hard" style={{ background: '#1a1a2e' }}>🔥 Hard (30 pts)</option>
+                    </select>
+                  </div>
                 </div>
 
-                <div className="rounded-xl p-4 text-center" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                  <Video className="w-6 h-6 mx-auto mb-2" style={{ color: '#ec4899' }} />
-                  <p className="text-xs text-white/40 mb-2">Video (max 10MB)</p>
-                  <label className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-xs cursor-pointer" style={{ background: 'rgba(236,72,153,0.15)', color: '#ec4899' }}>
-                    <Upload className="w-3 h-3" /> {form.videoData ? 'Replace' : 'Upload'}
-                    <input type="file" accept="video/*" onChange={e => handleFileUpload('video', e)} className="hidden" />
-                  </label>
-                  {form.videoData && (
-                    <div className="mt-2">
-                      <video src={form.videoData} className="w-full h-20 object-cover rounded-lg" />
-                      <button onClick={() => { setForm(f => ({ ...f, videoData: '' })); setVideoFile(null); }} className="text-xs text-red-400 mt-1">Remove</button>
-                    </div>
-                  )}
+                <div>
+                  <label className="text-sm text-white/60 mb-1.5 block">Question</label>
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    {[
+                      form.type === 'meme-dialogue' ? 'Guess the dialogue' : form.type === 'song-tune' ? 'Guess the song' : 'Guess the movie name',
+                      form.type === 'meme-dialogue' ? 'What is being said here?' : form.type === 'song-tune' ? 'Name this song' : 'Name this movie',
+                      form.type === 'meme-dialogue' ? 'Complete the dialogue' : form.type === 'song-tune' ? 'Identify the song' : 'Which movie is this from?',
+                      'What is this?',
+                    ].map((suggestion) => (
+                      <button
+                        key={suggestion}
+                        type="button"
+                        onClick={() => setForm({ ...form, question: suggestion })}
+                        className="text-xs px-3 py-1.5 rounded-full transition-all hover:scale-105 cursor-pointer"
+                        style={{ background: form.question === suggestion ? 'rgba(168,85,247,0.25)' : 'rgba(255,255,255,0.06)', border: `1px solid ${form.question === suggestion ? 'rgba(168,85,247,0.6)' : 'rgba(255,255,255,0.12)'}`, color: form.question === suggestion ? '#c084fc' : 'rgba(255,255,255,0.6)' }}
+                      >
+                        {suggestion}
+                      </button>
+                    ))}
+                  </div>
+                  <textarea className="w-full rounded-xl px-4 py-3 text-white outline-none text-sm" rows={2}
+                    style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}
+                    placeholder="Enter a custom question or pick a suggestion above..." value={form.question} onChange={e => setForm({ ...form, question: e.target.value })} />
                 </div>
 
-                <div className="rounded-xl p-4 text-center" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                  <Mic className="w-6 h-6 mx-auto mb-2" style={{ color: '#06b6d4' }} />
-                  <p className="text-xs text-white/40 mb-2">Audio (max 10MB)</p>
-                  <label className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-xs cursor-pointer" style={{ background: 'rgba(6,182,212,0.15)', color: '#06b6d4' }}>
-                    <Upload className="w-3 h-3" /> {form.audioData ? 'Replace' : 'Upload'}
-                    <input type="file" accept="audio/*" onChange={e => handleFileUpload('audio', e)} className="hidden" />
-                  </label>
-                  {form.audioData && (
-                    <div className="mt-2">
-                      <audio src={form.audioData} controls className="w-full" />
-                      <button onClick={() => { setForm(f => ({ ...f, audioData: '' })); setAudioFile(null); }} className="text-xs text-red-400 mt-1">Remove</button>
-                    </div>
-                  )}
+                <div>
+                  <label className="text-sm text-white/60 mb-1 block">Correct Answer</label>
+                  <input className="w-full rounded-xl px-4 py-3 text-white outline-none text-sm"
+                    style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}
+                    placeholder="The correct answer" value={form.answer} onChange={e => setForm({ ...form, answer: e.target.value })} />
                 </div>
-              </div>
-              {uploading && <p className="text-xs text-white/40 mt-2 text-center">Uploading {uploading}... Please wait</p>}
-            </div>
 
-            {form.type === 'song-tune' && (
-              <div className="mb-4">
-                <label className="text-sm text-white/60 mb-1 block flex items-center gap-2"><Music className="w-4 h-4" /> Audio Hint / Lyrics</label>
-                <textarea className="w-full rounded-xl px-4 py-3 text-white outline-none" rows={2}
-                  style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}
-                  placeholder="Describe the tune or provide lyrics..." value={form.audioHint || ''} onChange={e => setForm({ ...form, audioHint: e.target.value })} />
-              </div>
-            )}
+                {form.questionType === 'multiple-choice' && (
+                  <div>
+                    <label className="text-sm text-white/60 mb-1 block">Options (include the correct answer)</label>
+                    {form.options.map((opt, i) => (
+                      <div key={i} className="flex items-center gap-2 mb-2">
+                        <span className="text-xs text-white/30 w-5">{i + 1}.</span>
+                        <input className="flex-1 rounded-xl px-4 py-2.5 text-white outline-none text-sm"
+                          style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}
+                          placeholder={`Option ${i + 1}`} value={opt} onChange={e => {
+                            const opts = [...form.options];
+                            opts[i] = e.target.value;
+                            setForm({ ...form, options: opts });
+                          }} />
+                        <button className={`text-xs px-3 py-1.5 rounded-lg transition-all ${form.answer === opt ? 'text-green-400 font-bold' : 'text-white/30'}`}
+                          style={{ background: form.answer === opt ? 'rgba(34,197,94,0.15)' : 'rgba(255,255,255,0.05)' }}
+                          onClick={() => setForm({ ...form, answer: opt })}>
+                          {form.answer === opt ? '✓ Answer' : 'Set Answer'}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
 
-            <div className="flex flex-wrap items-center gap-3 justify-end">
-              <button disabled={isSaving} className="px-5 py-2.5 rounded-xl font-semibold cursor-pointer transition-all hover:bg-white/10" style={{ background: 'rgba(255,255,255,0.08)', color: 'white', opacity: isSaving ? 0.5 : 1 }}
-                onClick={() => { setShowForm(false); setEditId(null); }}>
-                Cancel
-              </button>
-              {editId && (
-                <button type="button" className="px-5 py-2.5 rounded-xl font-semibold transition-all hover:bg-red-500/20" style={{ background: 'rgba(239,68,68,0.15)', color: '#fda4af' }}
-                  onClick={() => {
-                    const currentItem = content.find(c => c.id === editId);
-                    if (currentItem) {
-                      setDeleteTarget(currentItem);
-                    }
-                  }}>
-                  Delete
+                <div>
+                  <label className="text-sm text-white/60 mb-2 block">Upload Media (Optional)</label>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="rounded-xl p-4 text-center" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                      <Image className="w-6 h-6 mx-auto mb-2" style={{ color: '#a855f7' }} />
+                      <p className="text-xs text-white/40 mb-2">Image (max 5MB)</p>
+                      <label className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-xs cursor-pointer" style={{ background: 'rgba(168,85,247,0.15)', color: '#a855f7' }}>
+                        <Upload className="w-3 h-3" /> {form.imageData ? 'Replace' : 'Upload'}
+                        <input type="file" accept="image/*" onChange={e => handleFileUpload('image', e)} className="hidden" />
+                      </label>
+                      {form.imageData && (
+                        <div className="mt-2">
+                          <img src={form.imageData} alt="preview" className="w-full h-20 object-cover rounded-lg" />
+                          <button onClick={() => { setForm(f => ({ ...f, imageData: '' })); setImageFile(null); }} className="text-xs text-red-400 mt-1">Remove</button>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="rounded-xl p-4 text-center" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                      <Video className="w-6 h-6 mx-auto mb-2" style={{ color: '#ec4899' }} />
+                      <p className="text-xs text-white/40 mb-2">Video (max 10MB)</p>
+                      <label className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-xs cursor-pointer" style={{ background: 'rgba(236,72,153,0.15)', color: '#ec4899' }}>
+                        <Upload className="w-3 h-3" /> {form.videoData ? 'Replace' : 'Upload'}
+                        <input type="file" accept="video/*" onChange={e => handleFileUpload('video', e)} className="hidden" />
+                      </label>
+                      {form.videoData && (
+                        <div className="mt-2">
+                          <video src={form.videoData} className="w-full h-20 object-cover rounded-lg" />
+                          <button onClick={() => { setForm(f => ({ ...f, videoData: '' })); setVideoFile(null); }} className="text-xs text-red-400 mt-1">Remove</button>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="rounded-xl p-4 text-center" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                      <Mic className="w-6 h-6 mx-auto mb-2" style={{ color: '#06b6d4' }} />
+                      <p className="text-xs text-white/40 mb-2">Audio (max 10MB)</p>
+                      <label className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-xs cursor-pointer" style={{ background: 'rgba(6,182,212,0.15)', color: '#06b6d4' }}>
+                        <Upload className="w-3 h-3" /> {form.audioData ? 'Replace' : 'Upload'}
+                        <input type="file" accept="audio/*" onChange={e => handleFileUpload('audio', e)} className="hidden" />
+                      </label>
+                      {form.audioData && (
+                        <div className="mt-2">
+                          <audio src={form.audioData} controls className="w-full" />
+                          <button onClick={() => { setForm(f => ({ ...f, audioData: '' })); setAudioFile(null); }} className="text-xs text-red-400 mt-1">Remove</button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  {uploading && <p className="text-xs text-white/40 mt-2 text-center">Uploading {uploading}... Please wait</p>}
+                </div>
+
+                {form.type === 'song-tune' && (
+                  <div>
+                    <label className="text-sm text-white/60 mb-1 block flex items-center gap-2"><Music className="w-4 h-4" /> Audio Hint / Lyrics</label>
+                    <textarea className="w-full rounded-xl px-4 py-3 text-white outline-none text-sm" rows={2}
+                      style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}
+                      placeholder="Describe the tune or provide lyrics..." value={form.audioHint || ''} onChange={e => setForm({ ...form, audioHint: e.target.value })} />
+                  </div>
+                )}
+              </div>
+
+              {/* Sticky Footer */}
+              <div className="flex flex-wrap items-center gap-3 justify-end p-5 sm:p-6 border-t border-white/10 bg-slate-950/95 flex-shrink-0">
+                <button disabled={isSaving} className="px-5 py-2.5 rounded-xl font-semibold cursor-pointer transition-all hover:bg-white/10 text-sm" style={{ background: 'rgba(255,255,255,0.08)', color: 'white', opacity: isSaving ? 0.5 : 1 }}
+                  onClick={() => { setShowForm(false); setEditId(null); }}>
+                  Cancel
                 </button>
-              )}
-              <button disabled={isSaving} className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-white cursor-pointer transition-all hover:opacity-90"
-                style={{ background: 'linear-gradient(135deg, #a855f7, #ec4899)', opacity: isSaving ? 0.7 : 1 }}
-                onClick={handleSubmit}>
-                <Save className="w-4 h-4" /> {isSaving ? 'Saving...' : (editId ? 'Update' : 'Save')}
-              </button>
+                {editId && (
+                  <button type="button" className="px-5 py-2.5 rounded-xl font-semibold transition-all hover:bg-red-500/20 text-sm" style={{ background: 'rgba(239,68,68,0.15)', color: '#fda4af' }}
+                    onClick={() => {
+                      const currentItem = content.find(c => c.id === editId);
+                      if (currentItem) {
+                        setDeleteTarget(currentItem);
+                      }
+                    }}>
+                    Delete
+                  </button>
+                )}
+                <button disabled={isSaving} className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-white cursor-pointer transition-all hover:opacity-90 text-sm"
+                  style={{ background: 'linear-gradient(135deg, #a855f7, #ec4899)', opacity: isSaving ? 0.7 : 1 }}
+                  onClick={handleSubmit}>
+                  <Save className="w-4 h-4" /> {isSaving ? 'Saving...' : (editId ? 'Update' : 'Save')}
+                </button>
+              </div>
             </div>
-          </div>
           </div>
         )}
 
@@ -1121,18 +1226,13 @@ const GameSetup: React.FC<{
   const [playUnlimited, setPlayUnlimited] = useState(false);
   const [timePerQ, setTimePerQ] = useState(30);
   const [categories, setCategories] = useState<ContentType[]>(['meme-dialogue', 'song-tune', 'movie-meme']);
-  const [questionTypes, setQuestionTypes] = useState<QuestionType[]>(['multiple-choice', 'open-ended']);
+  const questionTypes: QuestionType[] = ['multiple-choice', 'open-ended'];
   const [newTeamName, setNewTeamName] = useState('');
   const [newPlayerName, setNewPlayerName] = useState('');
 
   const toggleCat = (t: ContentType) => {
     if (categories.includes(t) && categories.length <= 1) return;
     setCategories(prev => prev.includes(t) ? prev.filter(c => c !== t) : [...prev, t]);
-  };
-
-  const toggleQType = (t: QuestionType) => {
-    if (questionTypes.includes(t) && questionTypes.length <= 1) return;
-    setQuestionTypes(prev => prev.includes(t) ? prev.filter(q => q !== t) : [...prev, t]);
   };
 
   const addTeam = () => {
@@ -1177,6 +1277,7 @@ const GameSetup: React.FC<{
             <button onClick={onBack} className="w-10 h-10 rounded-xl flex items-center justify-center border border-theme-card bg-theme-card" style={{ backdropFilter: 'blur(10px)' }}>
               <ArrowLeft className="w-5 h-5" />
             </button>
+            <GameVerseLogo size={36} />
             <div>
               <h1 className="text-2xl font-bold"><GradientText>Game Setup</GradientText></h1>
               <p className="text-white/40 text-sm">Configure your game session</p>
@@ -1227,27 +1328,6 @@ const GameSetup: React.FC<{
           </div>
         </div>
 
-        <div className="rounded-2xl p-6 mb-6" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
-          <h2 className="text-lg font-bold mb-4 flex items-center gap-2"><FileQuestion className="w-5 h-5" style={{ color: '#22c55e' }} /> Question Types</h2>
-          <div className="grid grid-cols-2 gap-3">
-            {[
-              { type: 'multiple-choice' as QuestionType, emoji: '📋', label: 'Multiple Choice', desc: 'Select from options', color: '#3b82f6' },
-              { type: 'open-ended' as QuestionType, emoji: '✍️', label: 'Open Ended', desc: 'Host verifies answer', color: '#22c55e' },
-            ].map(item => (
-              <button key={item.type} className="p-4 rounded-xl border-2 flex flex-col items-center gap-2 relative transition-all"
-                style={{
-                  borderColor: questionTypes.includes(item.type) ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.05)',
-                  background: questionTypes.includes(item.type) ? 'rgba(255,255,255,0.1)' : 'transparent',
-                }}
-                onClick={() => toggleQType(item.type)}>
-                {questionTypes.includes(item.type) && <Check className="w-4 h-4 absolute top-2 right-2" style={{ color: '#22c55e' }} />}
-                <span className="text-2xl">{item.emoji}</span>
-                <span className="font-semibold text-sm">{item.label}</span>
-                <span className="text-xs text-white/40">{item.desc}</span>
-              </button>
-            ))}
-          </div>
-        </div>
 
         <div className="rounded-2xl p-6 mb-6" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
           <h2 className="text-lg font-bold mb-4 flex items-center gap-2"><Clock className="w-5 h-5" style={{ color: '#22c55e' }} /> Settings</h2>
@@ -1388,7 +1468,8 @@ const GameLobby: React.FC<{
         </div>
       )}
       <div className="max-w-xl w-full">
-        <div className="text-center mb-8">
+        <div className="text-center mb-8 flex flex-col items-center">
+          <GameVerseLogo size={64} style={{ animation: 'pulse 2s cubic-bezier(0.4,0,0.6,1) infinite' }} />
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm text-white/60 mb-4 border border-theme-card bg-theme-card">
             <Zap className="w-4 h-4 text-yellow-400" /> Get Ready to Play!
           </div>
@@ -1498,6 +1579,7 @@ const GamePlay: React.FC<{
       <div className="max-w-4xl w-full mx-auto relative">
         <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
           <div className="flex items-center gap-2 flex-wrap">
+            <GameVerseLogo size={24} />
             <span className="text-xs px-2.5 py-1 rounded-full font-semibold" style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.6)' }}>
               Round {roundNumber}/{totalRounds}
             </span>
@@ -1652,6 +1734,9 @@ const RevealScreen: React.FC<{
   return (
     <div className="min-h-screen flex items-center justify-center px-4 py-6">
       <div className="max-w-xl w-full">
+        <div className="flex justify-center mb-4">
+          <GameVerseLogo size={32} />
+        </div>
         <div className="w-full h-1.5 rounded-full mb-6" style={{ background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
           <div className="h-full rounded-full" style={{ width: `${progress}%`, background: 'linear-gradient(90deg, #a855f7, #ec4899)' }} />
         </div>
@@ -1727,6 +1812,9 @@ const Scoreboard: React.FC<{
   return (
     <div className="min-h-screen flex items-center justify-center px-4 py-6 relative">
       <div className="max-w-xl w-full">
+        <div className="flex justify-center mb-6">
+          <GameVerseLogo size={64} style={{ animation: 'bounce 1s infinite' }} />
+        </div>
         {winner && (
           <div className="text-center mb-8">
             <div className="text-7xl mb-4 animate-bounce">🏆</div>
@@ -1836,8 +1924,8 @@ const AdminLogin: React.FC<{
         </button>
 
         <div className="text-center mt-6 mb-8">
-          <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4 bg-purple-500/10 border border-purple-500/20">
-            <Settings className="w-7 h-7 text-purple-400" />
+          <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 bg-purple-500/10 border border-purple-500/20 overflow-hidden">
+            <GameVerseLogo size={48} />
           </div>
           <h1 className="text-3xl font-black mb-2"><GradientText>Admin Login</GradientText></h1>
           <p className="text-sm text-theme-muted" style={{ color: 'var(--text-muted)' }}>Sign in to manage game content</p>
@@ -2023,10 +2111,28 @@ const App: React.FC = () => {
   };
 
   const handlePlayAgain = () => {
+    if (!gameSettings) return;
+
+    const filtered = content.filter((c: GameContent) =>
+      gameSettings.categories.includes(c.type) && gameSettings.questionTypes.includes(c.questionType || 'multiple-choice')
+    );
+    const questionLimit = gameSettings.playUnlimited ? filtered.length : gameSettings.rounds;
+    const shuffled = shuffle(filtered).slice(0, questionLimit);
+    const questions = shuffled.map(q => ({
+      ...q, shuffledOptions: q.options ? shuffle(q.options) : undefined,
+    }));
+
+    if (questions.length === 0) {
+      setAlertInfo({ open: true, title: 'No questions available', message: 'Please add questions in the Admin panel before starting a game.' });
+      return;
+    }
+
     setGameState(prev => ({
-      ...prev, currentIdx: 0, currentQuestion: prev.questions[0],
       players: prev.players.map((p: Player) => ({ ...p, score: 0, streak: 0, bestStreak: 0, correctAnswers: 0, totalAnswers: 0 })),
       teams: prev.teams.map((t: Team) => ({ ...t, score: 0 })),
+      questions,
+      currentIdx: 0,
+      currentQuestion: questions[0],
     }));
     setScreen('lobby');
   };
