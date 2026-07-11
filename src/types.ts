@@ -12,6 +12,7 @@ export interface GameContent {
   difficulty: 'easy' | 'medium' | 'hard';
   points: number;
   createdAt: number;
+  movie?: string;
 }
 
 // Game modes
