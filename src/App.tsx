@@ -1,6 +1,30 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabaseClient';
 import logoImg from '../Logo/logo.png';
+import {
+  ArrowLeft,
+  Edit3,
+  Film,
+  Folder,
+  FolderOpen,
+  Home,
+  Image as ImageIcon,
+  LogOut,
+  Mic2,
+  Music,
+  PenLine,
+  Plus,
+  RotateCcw,
+  Search,
+  Save,
+  Trash2,
+  Trophy,
+  Upload,
+  User,
+  Users,
+  Video,
+  X,
+} from 'lucide-react';
 
 
 // ==================== TYPES ====================
@@ -192,6 +216,36 @@ const GradientText: React.FC<{ children: React.ReactNode; className?: string }> 
     {children}
   </span>
 );
+
+const contentIconMap = {
+  'meme-dialogue': PenLine,
+  'song-tune': Music,
+  'movie-meme': Film,
+} satisfies Record<ContentType, React.ComponentType<{ className?: string }>>;
+
+const contentAccentMap = {
+  'meme-dialogue': '#a855f7',
+  'song-tune': '#ec4899',
+  'movie-meme': '#06b6d4',
+} satisfies Record<ContentType, string>;
+
+const SoftIcon: React.FC<{
+  icon: React.ComponentType<{ className?: string }>;
+  color?: string;
+  size?: 'sm' | 'md' | 'lg';
+  className?: string;
+}> = ({ icon: Icon, color = '#a855f7', size = 'md', className = '' }) => {
+  const dims = size === 'sm' ? 'w-8 h-8 rounded-lg' : size === 'lg' ? 'w-14 h-14 rounded-2xl' : 'w-11 h-11 rounded-xl';
+  const iconSize = size === 'sm' ? 'w-4 h-4' : size === 'lg' ? 'w-7 h-7' : 'w-5 h-5';
+  return (
+    <span
+      className={`${dims} inline-flex items-center justify-center shrink-0 ${className}`}
+      style={{ background: `${color}18`, color, border: `1px solid ${color}30` }}
+    >
+      <Icon className={iconSize} />
+    </span>
+  );
+};
 
 const ConfirmModal: React.FC<{
   open: boolean;
@@ -542,6 +596,8 @@ const AdminScreen: React.FC<{
   const [editId, setEditId] = useState<string | null>(null);
   const [filter, setFilter] = useState<string>('all');
   const [search, setSearch] = useState('');
+  const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
+  const [isCreatingFolder, setIsCreatingFolder] = useState(false);
 
   const [form, setForm] = useState({
     type: 'meme-dialogue' as ContentType,
@@ -586,9 +642,44 @@ const AdminScreen: React.FC<{
 
   const filtered = content.filter(c => {
     const matchType = filter === 'all' || c.type === filter;
-    const matchSearch = !search || c.question.toLowerCase().includes(search.toLowerCase()) || c.answer.toLowerCase().includes(search.toLowerCase());
+    const matchSearch = !search ||
+      c.question.toLowerCase().includes(search.toLowerCase()) ||
+      c.answer.toLowerCase().includes(search.toLowerCase()) ||
+      (c.movie || '').toLowerCase().includes(search.toLowerCase());
     return matchType && matchSearch;
   });
+
+  const availableFolders = React.useMemo(() => (
+    Array.from(new Set(content.map(item => item.movie?.trim()).filter(Boolean) as string[]))
+      .sort((a, b) => a.localeCompare(b))
+  ), [content]);
+
+  const mediaLibrary = React.useMemo(() => {
+    const seen = new Set<string>();
+    const items: Array<{ kind: 'image' | 'video' | 'audio'; url: string; label: string; folder: string }> = [];
+    content.forEach(item => {
+      const folder = item.movie?.trim() || 'Independent Content';
+      ([
+        ['image', item.imageUrl || item.imageData],
+        ['video', item.videoUrl || item.videoData],
+        ['audio', item.audioUrl || item.audioData],
+      ] as const).forEach(([kind, url]) => {
+        if (!url || seen.has(`${kind}:${url}`)) return;
+        seen.add(`${kind}:${url}`);
+        items.push({ kind, url, label: item.question || item.answer || folder, folder });
+      });
+    });
+    return items;
+  }, [content]);
+
+  const isMediaUsedByOthers = (url: string | undefined, currentId: string | null) => {
+    if (!url) return false;
+    return content.some(item => item.id !== currentId && (
+      item.imageUrl === url || item.imageData === url ||
+      item.videoUrl === url || item.videoData === url ||
+      item.audioUrl === url || item.audioData === url
+    ));
+  };
 
   const handleSubmit = async () => {
     if (!form.question.trim() || !form.answer.trim()) {
@@ -665,15 +756,15 @@ const AdminScreen: React.FC<{
         const originalItem = content.find(c => c.id === editId);
         if (originalItem) {
           const filesToDelete: string[] = [];
-          if (originalItem.imageUrl && (imageFile || !form.imageData)) {
+          if (originalItem.imageUrl && (imageFile || !form.imageData) && !isMediaUsedByOthers(originalItem.imageUrl, editId)) {
             const name = getFileNameFromUrl(originalItem.imageUrl);
             if (name) filesToDelete.push(name);
           }
-          if (originalItem.videoUrl && (videoFile || !form.videoData)) {
+          if (originalItem.videoUrl && (videoFile || !form.videoData) && !isMediaUsedByOthers(originalItem.videoUrl, editId)) {
             const name = getFileNameFromUrl(originalItem.videoUrl);
             if (name) filesToDelete.push(name);
           }
-          if (originalItem.audioUrl && (audioFile || !form.audioData)) {
+          if (originalItem.audioUrl && (audioFile || !form.audioData) && !isMediaUsedByOthers(originalItem.audioUrl, editId)) {
             const name = getFileNameFromUrl(originalItem.audioUrl);
             if (name) filesToDelete.push(name);
           }
@@ -707,6 +798,7 @@ const AdminScreen: React.FC<{
       setAudioFile(null);
       setShowForm(false);
       setEditId(null);
+      setIsCreatingFolder(false);
     } catch (err: any) {
       console.error('Error saving content:', err);
       showAlert('Error saving', err.message || 'Failed to save content to Supabase.');
@@ -734,6 +826,7 @@ const AdminScreen: React.FC<{
     setImageFile(null);
     setVideoFile(null);
     setAudioFile(null);
+    setIsCreatingFolder(!item.movie);
     setShowForm(true);
   };
 
@@ -767,17 +860,14 @@ const AdminScreen: React.FC<{
   };
 
   const diffColor = (d: string) => d === 'easy' ? '#22c55e' : d === 'medium' ? '#eab308' : '#ef4444';
-  const typeEmoji = (t: string) => t === 'meme-dialogue' ? '💬' : t === 'song-tune' ? '🎵' : '🎬';
   const typeLabel = (t: string) => t === 'meme-dialogue' ? 'Meme' : t === 'song-tune' ? 'Song' : 'Movie';
 
   const renderQuestionCard = (item: GameContent) => (
-    <div key={item.id} className="rounded-3xl border border-theme-card bg-theme-card p-5 shadow-[0_24px_80px_rgba(15,23,42,0.08)] transition-transform duration-300 hover:-translate-y-1">
+    <div key={item.id} className="rounded-2xl border border-theme-card bg-theme-card p-5 shadow-[0_24px_80px_rgba(15,23,42,0.08)] transition-transform duration-300 hover:-translate-y-1">
       <div className="flex items-start justify-between gap-3 mb-4">
-        <div className={`min-w-[44px] min-h-[44px] rounded-2xl flex items-center justify-center text-lg ${item.type === 'meme-dialogue' ? 'bg-purple-500/15 text-purple-300' : item.type === 'song-tune' ? 'bg-pink-500/15 text-pink-300' : 'bg-cyan-500/15 text-cyan-300'}`}>
-          {typeEmoji(item.type)}
-        </div>
+        <SoftIcon icon={contentIconMap[item.type]} color={contentAccentMap[item.type]} />
         <div className="flex flex-wrap items-center gap-2">
-          {item.movie && <span className="text-xs px-2 py-1 rounded-full bg-blue-500/15 text-blue-300 truncate max-w-[120px]" title={item.movie}>🎬 {item.movie}</span>}
+          {item.movie && <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-blue-500/15 text-blue-300 truncate max-w-[150px]" title={item.movie}><Folder className="w-3 h-3" /> {item.movie}</span>}
           <span className="text-xs px-2 py-1 rounded-full" style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.75)' }}>{typeLabel(item.type)}</span>
           <span className="text-xs px-2 py-1 rounded-full" style={{ background: 'rgba(255,255,255,0.08)', color: diffColor(item.difficulty) }}>{item.difficulty}</span>
         </div>
@@ -815,13 +905,13 @@ const AdminScreen: React.FC<{
       <div className="mt-5 flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-white/10">
         <div className="flex flex-wrap gap-2">
           <span className="text-xs px-2 py-1 rounded-full" style={{ background: 'rgba(234,179,8,0.15)', color: '#eab308' }}>{item.points} pts</span>
-          {item.imageData && <span className="text-xs px-2 py-1 rounded-full bg-purple-500/15 text-purple-200">🖼️ Image</span>}
-          {item.videoData && <span className="text-xs px-2 py-1 rounded-full bg-pink-500/15 text-pink-200">🎬 Video</span>}
-          {item.audioData && <span className="text-xs px-2 py-1 rounded-full bg-cyan-500/15 text-cyan-200">🎵 Audio</span>}
+          {item.imageData && <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-purple-500/15 text-purple-200"><ImageIcon className="w-3 h-3" /> Image</span>}
+          {item.videoData && <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-pink-500/15 text-pink-200"><Video className="w-3 h-3" /> Video</span>}
+          {item.audioData && <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-cyan-500/15 text-cyan-200"><Music className="w-3 h-3" /> Audio</span>}
         </div>
         <div className="flex gap-2">
-          <button onClick={() => startEdit(item)} className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/80 hover:bg-white/10 transition">Edit</button>
-          <button onClick={() => setDeleteTarget(item)} className="rounded-2xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-200 hover:bg-red-500/20 transition">Delete</button>
+          <button onClick={() => startEdit(item)} className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/80 hover:bg-white/10 transition"><Edit3 className="w-4 h-4" /> Edit</button>
+          <button onClick={() => setDeleteTarget(item)} className="inline-flex items-center gap-1.5 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-200 hover:bg-red-500/20 transition"><Trash2 className="w-4 h-4" /> Delete</button>
         </div>
       </div>
     </div>
@@ -866,15 +956,15 @@ const AdminScreen: React.FC<{
               if (error) throw error;
 
               const filesToDelete: string[] = [];
-              if (deleteTarget.imageUrl) {
+              if (deleteTarget.imageUrl && !isMediaUsedByOthers(deleteTarget.imageUrl, deleteTarget.id)) {
                 const name = getFileNameFromUrl(deleteTarget.imageUrl);
                 if (name) filesToDelete.push(name);
               }
-              if (deleteTarget.videoUrl) {
+              if (deleteTarget.videoUrl && !isMediaUsedByOthers(deleteTarget.videoUrl, deleteTarget.id)) {
                 const name = getFileNameFromUrl(deleteTarget.videoUrl);
                 if (name) filesToDelete.push(name);
               }
-              if (deleteTarget.audioUrl) {
+              if (deleteTarget.audioUrl && !isMediaUsedByOthers(deleteTarget.audioUrl, deleteTarget.id)) {
                 const name = getFileNameFromUrl(deleteTarget.audioUrl);
                 if (name) filesToDelete.push(name);
               }
@@ -901,7 +991,7 @@ const AdminScreen: React.FC<{
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
             <button onClick={onBack} className="w-10 h-10 rounded-xl flex items-center justify-center border border-theme-card bg-theme-card" style={{ backdropFilter: 'blur(10px)' }}>
-              <span className="text-xl">⬅️</span>
+              <ArrowLeft className="w-5 h-5" />
             </button>
             <GuessWhatLogo size={36} />
             <div>
@@ -917,14 +1007,14 @@ const AdminScreen: React.FC<{
               className="p-3 rounded-xl flex items-center justify-center hover:scale-105 transition-all shadow-md cursor-pointer border border-red-500/20 hover:bg-red-500/10 text-red-400"
               title="Sign Out"
             >
-              <span className="text-lg">🚪</span>
+              <LogOut className="w-5 h-5" />
             </button>
             <button
               className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-white border-0 cursor-pointer transition-all hover:opacity-90"
               style={{ background: 'linear-gradient(135deg, #a855f7, #ec4899)' }}
-              onClick={() => { setShowForm(true); setEditId(null); setForm({ type: 'meme-dialogue', questionType: 'open-ended', question: '', answer: '', options: ['', '', '', ''], imageData: '', videoData: '', audioData: '', audioHint: '', difficulty: 'medium', points: 20, movie: '' }); setImageFile(null); setVideoFile(null); setAudioFile(null); }}
+              onClick={() => { setShowForm(true); setEditId(null); setForm({ type: 'meme-dialogue', questionType: 'open-ended', question: '', answer: '', options: ['', '', '', ''], imageData: '', videoData: '', audioData: '', audioHint: '', difficulty: 'medium', points: 20, movie: selectedFolder && selectedFolder !== '__independent__' ? selectedFolder : '' }); setIsCreatingFolder(!selectedFolder || selectedFolder === '__independent__'); setImageFile(null); setVideoFile(null); setAudioFile(null); }}
             >
-              ➕ Add Content
+              <Plus className="w-4 h-4" /> Add Content
             </button>
           </div>
         </div>
@@ -957,7 +1047,7 @@ const AdminScreen: React.FC<{
                   <p className="text-xs sm:text-sm text-white/50">Background is locked while editing. Save or delete when ready.</p>
                 </div>
                 <button onClick={() => { setShowForm(false); setEditId(null); }} className="w-10 h-10 rounded-2xl flex items-center justify-center bg-white/10 hover:bg-white/15 transition flex-shrink-0">
-                  <span className="text-xl">❌</span>
+                  <X className="w-5 h-5" />
                 </button>
               </div>
 
@@ -969,9 +1059,9 @@ const AdminScreen: React.FC<{
                     <select className="w-full rounded-xl px-4 py-3 text-white border-0 outline-none"
                       style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}
                       value={form.type} onChange={e => setForm({ ...form, type: e.target.value as ContentType })}>
-                      <option value="meme-dialogue" style={{ background: '#1a1a2e' }}>💬 Meme Dialogue</option>
-                      <option value="song-tune" style={{ background: '#1a1a2e' }}>🎵 Song Tune</option>
-                      <option value="movie-meme" style={{ background: '#1a1a2e' }}>🎬 Movie Meme</option>
+                      <option value="meme-dialogue" style={{ background: '#1a1a2e' }}>Meme Dialogue</option>
+                      <option value="song-tune" style={{ background: '#1a1a2e' }}>Song Tune</option>
+                      <option value="movie-meme" style={{ background: '#1a1a2e' }}>Movie Meme</option>
                     </select>
                   </div>
                   <div>
@@ -979,8 +1069,8 @@ const AdminScreen: React.FC<{
                     <select className="w-full rounded-xl px-4 py-3 text-white border-0 outline-none"
                       style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}
                       value={form.questionType} onChange={e => setForm({ ...form, questionType: e.target.value as QuestionType })}>
-                      <option value="multiple-choice" style={{ background: '#1a1a2e' }}>📋 Multiple Choice</option>
-                      <option value="open-ended" style={{ background: '#1a1a2e' }}>✍️ Open Ended</option>
+                      <option value="multiple-choice" style={{ background: '#1a1a2e' }}>Multiple Choice</option>
+                      <option value="open-ended" style={{ background: '#1a1a2e' }}>Open Ended</option>
                     </select>
                   </div>
                   <div>
@@ -991,9 +1081,9 @@ const AdminScreen: React.FC<{
                         const d = e.target.value as 'easy' | 'medium' | 'hard';
                         setForm({ ...form, difficulty: d, points: d === 'easy' ? 10 : d === 'medium' ? 20 : 30 });
                       }}>
-                      <option value="easy" style={{ background: '#1a1a2e' }}>😊 Easy (10 pts)</option>
-                      <option value="medium" style={{ background: '#1a1a2e' }}>🤔 Medium (20 pts)</option>
-                      <option value="hard" style={{ background: '#1a1a2e' }}>🔥 Hard (30 pts)</option>
+                      <option value="easy" style={{ background: '#1a1a2e' }}>Easy (10 pts)</option>
+                      <option value="medium" style={{ background: '#1a1a2e' }}>Medium (20 pts)</option>
+                      <option value="hard" style={{ background: '#1a1a2e' }}>Hard (30 pts)</option>
                     </select>
                   </div>
                 </div>
@@ -1031,10 +1121,49 @@ const AdminScreen: React.FC<{
                 </div>
 
                 <div>
-                  <label className="text-sm text-white/60 mb-1 block">Movie/Series Reference (Optional)</label>
-                  <input className="w-full rounded-xl px-4 py-3 text-white outline-none text-sm"
-                    style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}
-                    placeholder="E.g., Shrek, Iron Man, etc. (Leave blank if independent content)" value={form.movie || ''} onChange={e => setForm({ ...form, movie: e.target.value })} />
+                  <label className="text-sm text-white/60 mb-1 block">Folder</label>
+                  <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2">
+                    <select
+                      className="w-full rounded-xl px-4 py-3 text-white outline-none text-sm"
+                      style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}
+                      value={isCreatingFolder ? '__new__' : (form.movie || '')}
+                      onChange={e => {
+                        if (e.target.value === '__new__') {
+                          setIsCreatingFolder(true);
+                          setForm({ ...form, movie: '' });
+                          return;
+                        }
+                        setIsCreatingFolder(false);
+                        setForm({ ...form, movie: e.target.value });
+                      }}
+                    >
+                      <option value="" style={{ background: '#1a1a2e' }}>Independent Content</option>
+                      {availableFolders.map(folder => (
+                        <option key={folder} value={folder} style={{ background: '#1a1a2e' }}>{folder}</option>
+                      ))}
+                      <option value="__new__" style={{ background: '#1a1a2e' }}>Create new folder...</option>
+                    </select>
+                    <button
+                      type="button"
+                      className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition"
+                      style={{ background: isCreatingFolder ? 'rgba(168,85,247,0.18)' : 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: isCreatingFolder ? '#c084fc' : 'rgba(255,255,255,0.65)' }}
+                      onClick={() => {
+                        setIsCreatingFolder(true);
+                        setForm({ ...form, movie: '' });
+                      }}
+                    >
+                      <Folder className="w-4 h-4" /> New
+                    </button>
+                  </div>
+                  {isCreatingFolder && (
+                    <input
+                      className="mt-2 w-full rounded-xl px-4 py-3 text-white outline-none text-sm"
+                      style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}
+                      placeholder="Type folder name, e.g. Shrek, Iron Man, Random Content"
+                      value={form.movie || ''}
+                      onChange={e => setForm({ ...form, movie: e.target.value })}
+                    />
+                  )}
                 </div>
 
                 {form.questionType === 'multiple-choice' && (
@@ -1062,12 +1191,61 @@ const AdminScreen: React.FC<{
 
                 <div>
                   <label className="text-sm text-white/60 mb-2 block">Upload Media (Optional)</label>
+                  {mediaLibrary.length > 0 && (
+                    <div className="mb-3 rounded-xl p-4" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                      <div className="flex items-center gap-2 mb-3">
+                        <SoftIcon icon={FolderOpen} color="#38bdf8" size="sm" />
+                        <div>
+                          <p className="text-sm font-semibold text-white/80">Reuse existing media</p>
+                          <p className="text-xs text-white/40">Pick an asset already uploaded for another question.</p>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        {(['image', 'video', 'audio'] as const).map(kind => {
+                          const items = mediaLibrary.filter(item => item.kind === kind);
+                          const Icon = kind === 'image' ? ImageIcon : kind === 'video' ? Video : Music;
+                          return (
+                            <label key={kind} className="block">
+                              <span className="mb-1 flex items-center gap-1.5 text-xs uppercase tracking-[0.14em] text-white/35">
+                                <Icon className="w-3.5 h-3.5" /> {kind}
+                              </span>
+                              <select
+                                className="w-full rounded-xl px-3 py-2.5 text-white outline-none text-xs"
+                                style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}
+                                value={kind === 'image' ? form.imageData : kind === 'video' ? form.videoData : form.audioData}
+                                onChange={e => {
+                                  const value = e.target.value;
+                                  if (kind === 'image') {
+                                    setForm(f => ({ ...f, imageData: value }));
+                                    setImageFile(null);
+                                  } else if (kind === 'video') {
+                                    setForm(f => ({ ...f, videoData: value }));
+                                    setVideoFile(null);
+                                  } else {
+                                    setForm(f => ({ ...f, audioData: value }));
+                                    setAudioFile(null);
+                                  }
+                                }}
+                              >
+                                <option value="" style={{ background: '#1a1a2e' }}>No reused {kind}</option>
+                                {items.map(item => (
+                                  <option key={`${item.kind}:${item.url}`} value={item.url} style={{ background: '#1a1a2e' }}>
+                                    {item.folder} - {item.label.slice(0, 44)}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div className="rounded-xl p-4 text-center" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                      <span className="text-2xl mx-auto mb-2 block">🖼️</span>
+                      <SoftIcon icon={ImageIcon} color="#a855f7" className="mx-auto mb-2" />
                       <p className="text-xs text-white/40 mb-2">Image (max 5MB)</p>
                       <label className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-xs cursor-pointer" style={{ background: 'rgba(168,85,247,0.15)', color: '#a855f7' }}>
-                        <span>📤</span> {form.imageData ? 'Replace' : 'Upload'}
+                        <Upload className="w-3.5 h-3.5" /> {form.imageData ? 'Replace' : 'Upload'}
                         <input type="file" accept="image/*" onChange={e => handleFileUpload('image', e)} className="hidden" />
                       </label>
                       {form.imageData && (
@@ -1079,10 +1257,10 @@ const AdminScreen: React.FC<{
                     </div>
 
                     <div className="rounded-xl p-4 text-center" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                      <span className="text-2xl mx-auto mb-2 block">📹</span>
+                      <SoftIcon icon={Video} color="#ec4899" className="mx-auto mb-2" />
                       <p className="text-xs text-white/40 mb-2">Video (max 10MB)</p>
                       <label className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-xs cursor-pointer" style={{ background: 'rgba(236,72,153,0.15)', color: '#ec4899' }}>
-                        <span>📤</span> {form.videoData ? 'Replace' : 'Upload'}
+                        <Upload className="w-3.5 h-3.5" /> {form.videoData ? 'Replace' : 'Upload'}
                         <input type="file" accept="video/*" onChange={e => handleFileUpload('video', e)} className="hidden" />
                       </label>
                       {form.videoData && (
@@ -1094,10 +1272,10 @@ const AdminScreen: React.FC<{
                     </div>
 
                     <div className="rounded-xl p-4 text-center" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                      <span className="text-2xl mx-auto mb-2 block">🎤</span>
+                      <SoftIcon icon={Mic2} color="#06b6d4" className="mx-auto mb-2" />
                       <p className="text-xs text-white/40 mb-2">Audio (max 10MB)</p>
                       <label className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-xs cursor-pointer" style={{ background: 'rgba(6,182,212,0.15)', color: '#06b6d4' }}>
-                        <span>📤</span> {form.audioData ? 'Replace' : 'Upload'}
+                        <Upload className="w-3.5 h-3.5" /> {form.audioData ? 'Replace' : 'Upload'}
                         <input type="file" accept="audio/*" onChange={e => handleFileUpload('audio', e)} className="hidden" />
                       </label>
                       {form.audioData && (
@@ -1135,13 +1313,13 @@ const AdminScreen: React.FC<{
                         setDeleteTarget(currentItem);
                       }
                     }}>
-                    Delete
+                    <span className="inline-flex items-center gap-2"><Trash2 className="w-4 h-4" /> Delete</span>
                   </button>
                 )}
                 <button disabled={isSaving} className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-white cursor-pointer transition-all hover:opacity-90 text-sm"
                   style={{ background: 'linear-gradient(135deg, #a855f7, #ec4899)', opacity: isSaving ? 0.7 : 1 }}
                   onClick={handleSubmit}>
-                  <span>💾</span> {isSaving ? 'Saving...' : (editId ? 'Update' : 'Save')}
+                  <Save className="w-4 h-4" /> {isSaving ? 'Saving...' : (editId ? 'Update' : 'Save')}
                 </button>
               </div>
             </div>
@@ -1150,17 +1328,17 @@ const AdminScreen: React.FC<{
 
         <div className="flex flex-col sm:flex-row gap-3 mb-4">
           <div className="relative flex-1">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 opacity-30 text-sm">🔍</span>
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 opacity-40" />
             <input className="w-full rounded-xl pl-10 pr-4 py-3 text-white outline-none text-sm"
               style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}
-              placeholder="Search..." value={search} onChange={e => setSearch(e.target.value)} />
+              placeholder="Search questions, answers, or folders..." value={search} onChange={e => { setSearch(e.target.value); setSelectedFolder(null); }} />
           </div>
           <div className="flex gap-2">
             {[
               { key: 'all', label: 'All' },
-              { key: 'meme-dialogue', label: '💬 Memes' },
-              { key: 'song-tune', label: '🎵 Songs' },
-              { key: 'movie-meme', label: '🎬 Movies' },
+              { key: 'meme-dialogue', label: 'Memes' },
+              { key: 'song-tune', label: 'Songs' },
+              { key: 'movie-meme', label: 'Movies' },
             ].map(f => (
               <button key={f.key} className="px-3 py-2 rounded-lg text-sm font-medium transition-all"
                 style={{
@@ -1168,7 +1346,7 @@ const AdminScreen: React.FC<{
                   border: filter === f.key ? '1px solid rgba(168,85,247,0.4)' : '1px solid rgba(255,255,255,0.08)',
                   color: filter === f.key ? 'white' : 'rgba(255,255,255,0.4)',
                 }}
-                onClick={() => setFilter(f.key)}>
+                onClick={() => { setFilter(f.key); setSelectedFolder(null); }}>
                 {f.label}
               </button>
             ))}
@@ -1176,40 +1354,101 @@ const AdminScreen: React.FC<{
         </div>
 
         {filtered.length === 0 ? (
-          <div className="rounded-3xl p-12 text-center" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
+          <div className="rounded-2xl p-12 text-center" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
+            <SoftIcon icon={Folder} color="#64748b" size="lg" className="mx-auto mb-4" />
             <p className="text-white/40">No content found. Add your first question!</p>
           </div>
-        ) : (
-          <div className="space-y-10">
-            {groupedContent.sortedMovieNames.map(movieName => (
-              <div key={movieName} className="rounded-3xl p-6 border border-white/5 bg-white/[0.01]">
-                <div className="flex items-center gap-3 mb-6 pb-2 border-b border-white/10">
-                  <span className="text-cyan-400">🎬</span>
-                  <h2 className="text-lg font-bold text-white uppercase tracking-wider">{movieName}</h2>
-                  <span className="text-xs px-2.5 py-1 rounded-full font-semibold bg-white/10 text-white/60">
-                    {groupedContent.movieGroups[movieName].length} {groupedContent.movieGroups[movieName].length === 1 ? 'Question' : 'Questions'}
-                  </span>
-                </div>
-                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                  {groupedContent.movieGroups[movieName].map(item => renderQuestionCard(item))}
-                </div>
-              </div>
-            ))}
+        ) : selectedFolder === null ? (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {groupedContent.sortedMovieNames.map(movieName => {
+              const items = groupedContent.movieGroups[movieName];
+              const firstWithImage = items.find(item => item.imageData || item.imageUrl);
+              return (
+                <button
+                  key={movieName}
+                  onClick={() => setSelectedFolder(movieName)}
+                  className="group min-h-[170px] rounded-2xl border border-white/10 bg-white/[0.04] p-5 text-left transition-all hover:-translate-y-1 hover:border-cyan-400/35 hover:bg-cyan-400/[0.07] shadow-[0_18px_60px_rgba(0,0,0,0.12)]"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <SoftIcon icon={Folder} color="#38bdf8" size="lg" />
+                    <span className="rounded-full bg-white/10 px-2.5 py-1 text-xs font-semibold text-white/60">
+                      {items.length} {items.length === 1 ? 'question' : 'questions'}
+                    </span>
+                  </div>
+                  <h2 className="mt-5 text-lg font-bold text-white truncate">{movieName}</h2>
+                  <p className="mt-1 text-xs text-white/40 truncate">
+                    {items.slice(0, 2).map(item => item.answer).join(' / ') || 'Open folder'}
+                  </p>
+                  <div className="mt-4 flex items-center gap-2 text-xs text-cyan-200/80">
+                    {firstWithImage ? (
+                      <img src={firstWithImage.imageData || firstWithImage.imageUrl} alt="" className="h-8 w-12 rounded-lg object-cover border border-white/10" />
+                    ) : (
+                      <span className="h-8 w-12 rounded-lg border border-white/10 bg-white/5 flex items-center justify-center"><Film className="w-4 h-4" /></span>
+                    )}
+                    <span className="font-semibold">Open folder</span>
+                  </div>
+                </button>
+              );
+            })}
 
             {groupedContent.independent.length > 0 && (
-              <div className="rounded-3xl p-6 border border-white/5 bg-white/[0.01]">
-                <div className="flex items-center gap-3 mb-6 pb-2 border-b border-white/10">
-                  <span className="text-purple-400">❓</span>
-                  <h2 className="text-lg font-bold text-white uppercase tracking-wider">Independent Content</h2>
-                  <span className="text-xs px-2.5 py-1 rounded-full font-semibold bg-white/10 text-white/60">
-                    {groupedContent.independent.length} {groupedContent.independent.length === 1 ? 'Question' : 'Questions'}
+              <button
+                onClick={() => setSelectedFolder('__independent__')}
+                className="group min-h-[170px] rounded-2xl border border-white/10 bg-white/[0.04] p-5 text-left transition-all hover:-translate-y-1 hover:border-purple-400/35 hover:bg-purple-400/[0.07] shadow-[0_18px_60px_rgba(0,0,0,0.12)]"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <SoftIcon icon={Folder} color="#a855f7" size="lg" />
+                  <span className="rounded-full bg-white/10 px-2.5 py-1 text-xs font-semibold text-white/60">
+                    {groupedContent.independent.length} {groupedContent.independent.length === 1 ? 'question' : 'questions'}
                   </span>
                 </div>
-                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                  {groupedContent.independent.map(item => renderQuestionCard(item))}
+                <h2 className="mt-5 text-lg font-bold text-white truncate">Independent Content</h2>
+                <p className="mt-1 text-xs text-white/40">Questions without a folder</p>
+                <div className="mt-4 flex items-center gap-2 text-xs text-purple-200/80">
+                  <span className="h-8 w-12 rounded-lg border border-white/10 bg-white/5 flex items-center justify-center"><FolderOpen className="w-4 h-4" /></span>
+                  <span className="font-semibold">Open folder</span>
                 </div>
-              </div>
+              </button>
             )}
+          </div>
+        ) : (
+          <div>
+            {(() => {
+              const folderName = selectedFolder === '__independent__' ? 'Independent Content' : selectedFolder;
+              const folderItems = selectedFolder === '__independent__'
+                ? groupedContent.independent
+                : groupedContent.movieGroups[selectedFolder] || [];
+              return (
+                <>
+                  <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <button
+                        onClick={() => setSelectedFolder(null)}
+                        className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-white/10 border border-white/10 hover:bg-white/20 transition"
+                        title="Back to folders"
+                      >
+                        <ArrowLeft className="w-5 h-5" />
+                      </button>
+                      <SoftIcon icon={FolderOpen} color={selectedFolder === '__independent__' ? '#a855f7' : '#38bdf8'} />
+                      <div className="min-w-0">
+                        <h2 className="text-xl font-bold text-white truncate">{folderName}</h2>
+                        <p className="text-xs text-white/40">{folderItems.length} {folderItems.length === 1 ? 'question' : 'questions'} in this folder</p>
+                      </div>
+                    </div>
+                    <button
+                      className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
+                      style={{ background: 'linear-gradient(135deg, #a855f7, #ec4899)' }}
+                      onClick={() => { setShowForm(true); setEditId(null); setForm({ type: 'meme-dialogue', questionType: 'open-ended', question: '', answer: '', options: ['', '', '', ''], imageData: '', videoData: '', audioData: '', audioHint: '', difficulty: 'medium', points: 20, movie: selectedFolder === '__independent__' ? '' : selectedFolder }); setIsCreatingFolder(selectedFolder === '__independent__'); setImageFile(null); setVideoFile(null); setAudioFile(null); }}
+                    >
+                      <Plus className="w-4 h-4" /> Add question
+                    </button>
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                    {folderItems.map(item => renderQuestionCard(item))}
+                  </div>
+                </>
+              );
+            })()}
           </div>
         )}
       </div>
@@ -1566,9 +1805,9 @@ const GamePlay: React.FC<{
   const circumference = 2 * Math.PI * 26;
   const dashOffset = circumference * (1 - timerPct / 100);
 
-  const typeEmoji = (t: string) => t === 'meme-dialogue' ? '💬' : t === 'song-tune' ? '🎵' : '🎬';
   const typeLabel = (t: string) => t === 'meme-dialogue' ? 'Meme Dialogue' : t === 'song-tune' ? 'Song Tune' : 'Movie Meme';
   const isMC = question.questionType === 'multiple-choice';
+  const QuestionTypeIcon = contentIconMap[question.type];
 
   const handleRevealClick = () => {
     if (hasAnswered) return;
@@ -1594,7 +1833,7 @@ const GamePlay: React.FC<{
               Round {roundNumber}/{totalRounds}
             </span>
             <span className="text-xs px-2.5 py-1 rounded-full font-semibold" style={{ background: 'rgba(168,85,247,0.15)', color: '#a855f7' }}>
-              {typeEmoji(question.type)} {typeLabel(question.type)}
+              <span className="inline-flex items-center gap-1.5"><QuestionTypeIcon className="w-3.5 h-3.5" /> {typeLabel(question.type)}</span>
             </span>
             <span className="text-xs px-2.5 py-1 rounded-full font-semibold" style={{ background: 'rgba(234,179,8,0.15)', color: '#eab308' }}>
               {question.points} pts
@@ -1876,35 +2115,34 @@ const Scoreboard: React.FC<{
   const totalScore = scores.mode === 'team' ? scores.teams.reduce((s, t) => s + t.score, 0) : scores.players.reduce((s, p) => s + p.score, 0);
   const sorted = scores.mode === 'team' ? [...scores.teams].sort((a, b) => b.score - a.score) : [...scores.players].sort((a, b) => b.score - a.score);
   const winner = sorted.length > 0 ? sorted[0] : null;
-  const medal = (i: number) => i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`;
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4 py-6 relative">
       <div className="max-w-xl w-full">
         <div className="flex justify-center mb-6">
-          <GuessWhatLogo size={64} style={{ animation: 'bounce 1s infinite' }} />
+          <GuessWhatLogo size={64} />
         </div>
         {winner && (
           <div className="text-center mb-8">
-            <div className="text-7xl mb-4 animate-bounce">🏆</div>
+            <SoftIcon icon={Trophy} color="#eab308" size="lg" className="mx-auto mb-4" />
             <h1 className="text-4xl sm:text-5xl font-black mb-2">
               <GradientText>{winner.name} Wins!</GradientText>
             </h1>
-            <p className="text-white/40">{'emoji' in winner ? `${(winner as Team).emoji}` : '👤'} The champion!</p>
+            <p className="text-white/40">The champion!</p>
           </div>
         )}
 
         <div className="rounded-2xl p-6 mb-6" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-bold flex items-center gap-2"><span className="text-yellow-400">🏆</span> Final Scores</h2>
+            <h2 className="text-lg font-bold flex items-center gap-2"><Trophy className="w-5 h-5 text-yellow-400" /> Final Scores</h2>
             <span className="text-sm text-white/40">Total: {totalScore} pts</span>
           </div>
 
           <div className="space-y-3">
             {sorted.map((item, idx) => (
               <div key={item.id} className="p-4 rounded-xl flex items-center gap-4" style={{ background: idx === 0 ? 'rgba(234,179,8,0.1)' : 'rgba(255,255,255,0.03)', border: idx === 0 ? '1px solid rgba(234,179,8,0.3)' : '1px solid rgba(255,255,255,0.05)' }}>
-                <span className="text-2xl w-10 text-center">{medal(idx)}</span>
-                <span className="text-3xl">{('emoji' in item) ? (item as Team).emoji : '👤'}</span>
+                <span className="w-10 text-center font-black" style={{ color: idx === 0 ? '#eab308' : 'rgba(255,255,255,0.55)' }}>{idx < 3 ? `#${idx + 1}` : idx + 1}</span>
+                <SoftIcon icon={('emoji' in item) ? Users : User} color={('color' in item) ? (item as Team).color : '#a855f7'} size="sm" />
                 <div className="flex-1">
                   <p className="font-bold">{item.name}</p>
                   <div className="mt-1 w-full h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.05)' }}>
@@ -1932,14 +2170,14 @@ const Scoreboard: React.FC<{
 
         <div className="space-y-3">
           <button className="w-full py-4 rounded-xl text-lg font-bold text-white flex items-center justify-center gap-2 transition-all active:scale-[0.98]" style={{ background: 'linear-gradient(135deg, #a855f7, #ec4899)' }} onClick={onPlayAgain}>
-            🔄 Play Again
+            <RotateCcw className="w-5 h-5" /> Play Again
           </button>
           <div className="grid grid-cols-2 gap-3">
             <button className="py-3 rounded-xl font-semibold text-white/60 flex items-center justify-center gap-2 transition-all" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }} onClick={onNewSetup}>
-              👥 New Setup
+              <Users className="w-4 h-4" /> New Setup
             </button>
             <button className="py-3 rounded-xl font-semibold text-white/60 flex items-center justify-center gap-2 transition-all" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }} onClick={onHome}>
-              🏠 Home
+              <Home className="w-4 h-4" /> Home
             </button>
           </div>
         </div>
