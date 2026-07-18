@@ -105,6 +105,47 @@ function saveStats(s: any) {
   localStorage.setItem('gv_stats', JSON.stringify(s));
 }
 
+// Standalone utility to send feedback to Telegram Bot
+async function sendFeedbackToTelegram(name: string, category: string, message: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const token = (import.meta as any).env.VITE_TELEGRAM_BOT_TOKEN;
+    const chatId = (import.meta as any).env.VITE_TELEGRAM_CHAT_ID;
+
+    if (!token || !chatId || token === 'placeholder' || chatId === 'placeholder' || !token.trim() || !chatId.trim()) {
+      return { 
+        success: false, 
+        error: 'Telegram bot credentials are not configured in the .env file. Please check VITE_TELEGRAM_BOT_TOKEN and VITE_TELEGRAM_CHAT_ID.' 
+      };
+    }
+
+    const cleanName = name.trim() || 'Anonymous';
+    const cleanMsg = message.trim();
+    const formattedText = `💬 <b>New MemeGame Feedback!</b>\n\n👤 <b>Name:</b> ${cleanName}\n🏷️ <b>Category:</b> ${category}\n📝 <b>Message:</b>\n<i>${cleanMsg}</i>`;
+
+    const response = await fetch(`https://api.telegram.org/bot${token.trim()}/sendMessage`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        chat_id: chatId.trim(),
+        text: formattedText,
+        parse_mode: 'HTML',
+      }),
+    });
+
+    if (!response.ok) {
+      const errData = await response.json();
+      return { success: false, error: errData.description || 'API request failed.' };
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error sending Telegram feedback:', err);
+    return { success: false, error: err.message || 'Network error occurred.' };
+  }
+}
+
 function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -2318,6 +2359,132 @@ const RevealScreen: React.FC<{
   );
 };
 
+// ==================== FEEDBACK MODAL ====================
+const FeedbackModal: React.FC<{ open: boolean; onClose: () => void; currentScreen?: string }> = ({ open, onClose, currentScreen }) => {
+  const [name, setName] = useState('');
+  const [category, setCategory] = useState('General Feedback');
+  const [message, setMessage] = useState('');
+  const [status, setStatus] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
+  const [errorMsg, setErrorMsg] = useState('');
+
+  const categories = ['Suggest a Meme 🎭', 'Report a Bug 🐛', 'Game Suggestion 🎮', 'General Feedback 💬', 'Other ✨'];
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!message.trim()) return;
+    setStatus('sending');
+    setErrorMsg('');
+    const result = await sendFeedbackToTelegram(name, category, message);
+    if (result.success) {
+      setStatus('success');
+      setTimeout(() => { setStatus('idle'); setName(''); setCategory('General Feedback'); setMessage(''); onClose(); }, 2500);
+    } else {
+      setStatus('error');
+      setErrorMsg(result.error || 'Failed to send feedback.');
+    }
+  };
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center px-4 pb-4 sm:pb-0" style={{ background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(14px)' }} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="w-full max-w-lg rounded-3xl overflow-hidden shadow-2xl" style={{ background: 'linear-gradient(145deg, rgba(18,18,42,0.98), rgba(30,20,60,0.98))', border: '1px solid rgba(168,85,247,0.25)', maxHeight: '90vh', overflowY: 'auto' }}>
+        {/* Header */}
+        <div className="relative p-6 pb-4" style={{ background: 'linear-gradient(135deg, rgba(168,85,247,0.15), rgba(236,72,153,0.1))' }}>
+          <div className="absolute inset-0 opacity-30" style={{ backgroundImage: 'radial-gradient(circle at 20% 50%, rgba(168,85,247,0.3) 0%, transparent 50%), radial-gradient(circle at 80% 20%, rgba(236,72,153,0.2) 0%, transparent 50%)' }} />
+          <div className="relative flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-2xl" style={{ background: 'linear-gradient(135deg, rgba(168,85,247,0.3), rgba(236,72,153,0.2))', border: '1px solid rgba(168,85,247,0.4)' }}>💬</div>
+              <div>
+                <h2 className="text-xl font-black text-white">Share Feedback</h2>
+                <p className="text-xs text-white/50">Your thoughts help us improve!</p>
+              </div>
+            </div>
+            <button onClick={onClose} className="w-9 h-9 rounded-xl flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 transition-all">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+
+        {status === 'success' ? (
+          <div className="p-8 text-center">
+            <div className="text-6xl mb-4 animate-bounce">🎉</div>
+            <h3 className="text-2xl font-black text-white mb-2">Thanks!</h3>
+            <p className="text-white/60">Your feedback has been sent successfully.</p>
+            <div className="mt-4 text-4xl">✨</div>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="p-6 space-y-4">
+            {/* Name */}
+            <div>
+              <label className="text-xs font-bold uppercase tracking-wider text-white/50 block mb-1.5">Your Name <span className="text-white/30 normal-case font-normal">(optional)</span></label>
+              <input
+                type="text"
+                value={name}
+                onChange={e => setName(e.target.value)}
+                placeholder="Anonymous Memer 🎭"
+                className="w-full px-4 py-3 rounded-xl text-sm text-white outline-none transition-all focus:ring-2 focus:ring-purple-500/50"
+                style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }}
+              />
+            </div>
+
+            {/* Category */}
+            <div>
+              <label className="text-xs font-bold uppercase tracking-wider text-white/50 block mb-1.5">Category</label>
+              <div className="grid grid-cols-2 gap-2">
+                {categories.map(cat => (
+                  <button key={cat} type="button" onClick={() => setCategory(cat)}
+                    className="px-3 py-2.5 rounded-xl text-xs font-semibold text-left transition-all"
+                    style={{
+                      background: category === cat ? 'linear-gradient(135deg, rgba(168,85,247,0.3), rgba(236,72,153,0.2))' : 'rgba(255,255,255,0.05)',
+                      border: category === cat ? '1px solid rgba(168,85,247,0.5)' : '1px solid rgba(255,255,255,0.08)',
+                      color: category === cat ? '#e879f9' : 'rgba(255,255,255,0.6)',
+                      boxShadow: category === cat ? '0 0 15px rgba(168,85,247,0.2)' : 'none',
+                    }}>
+                    {cat}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Message */}
+            <div>
+              <label className="text-xs font-bold uppercase tracking-wider text-white/50 block mb-1.5">Message <span className="text-red-400">*</span></label>
+              <textarea
+                required
+                value={message}
+                onChange={e => setMessage(e.target.value)}
+                placeholder="Type your thoughts, suggestions, or the meme you'd love to see..."
+                rows={4}
+                className="w-full px-4 py-3 rounded-xl text-sm text-white outline-none transition-all focus:ring-2 focus:ring-purple-500/50 resize-none"
+                style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }}
+              />
+            </div>
+
+            {status === 'error' && (
+              <div className="p-3 rounded-xl text-sm text-red-300" style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.25)' }}>
+                ⚠️ {errorMsg}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={status === 'sending' || !message.trim()}
+              className="w-full py-4 rounded-xl font-bold text-white text-sm transition-all active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2"
+              style={{ background: 'linear-gradient(135deg, #a855f7, #ec4899)', boxShadow: '0 8px 25px rgba(168,85,247,0.35)' }}>
+              {status === 'sending' ? (
+                <><span className="animate-spin">⟳</span> Sending...</>
+              ) : (
+                <>✈️ Send Feedback</>
+              )}
+            </button>
+          </form>
+        )}
+      </div>
+    </div>
+  );
+};
+
 // ==================== SCOREBOARD ====================
 const Scoreboard: React.FC<{
   scores: { players: Player[]; teams: Team[]; mode: GameMode };
@@ -2328,76 +2495,332 @@ const Scoreboard: React.FC<{
   onHome: () => void;
   isDark: boolean;
   onToggleTheme: () => void;
-}> = ({ scores, rounds, timePerQ, onPlayAgain, onNewSetup, onHome, isDark, onToggleTheme }) => {
-  const totalScore = scores.mode === 'team' ? scores.teams.reduce((s, t) => s + t.score, 0) : scores.players.reduce((s, p) => s + p.score, 0);
-  const sorted = scores.mode === 'team' ? [...scores.teams].sort((a, b) => b.score - a.score) : [...scores.players].sort((a, b) => b.score - a.score);
+  onFeedback: () => void;
+}> = ({ scores, rounds, timePerQ, onPlayAgain, onNewSetup, onHome, onFeedback }) => {
+  const [activeTab, setActiveTab] = useState<'match' | 'halloffame'>('match');
+  const [hallOfFame, setHallOfFame] = useState<any[]>([]);
+  const [hofLoading, setHofLoading] = useState(false);
+  const [confettiPieces] = useState(() =>
+    Array.from({ length: 60 }, (_, i) => ({
+      id: i,
+      left: Math.random() * 100,
+      color: ['#a855f7', '#ec4899', '#3b82f6', '#22c55e', '#eab308', '#f97316', '#06b6d4'][Math.floor(Math.random() * 7)],
+      delay: Math.random() * 3,
+      duration: 3 + Math.random() * 4,
+      size: 6 + Math.random() * 8,
+      isCircle: Math.random() > 0.5,
+    }))
+  );
+  const [showConfetti, setShowConfetti] = useState(true);
+
+  useEffect(() => {
+    const t = setTimeout(() => setShowConfetti(false), 5000);
+    return () => clearTimeout(t);
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'halloffame') {
+      setHofLoading(true);
+      supabase
+        .from('scoreboard')
+        .select('*')
+        .order('total_score', { ascending: false })
+        .limit(10)
+        .then(({ data, error }) => {
+          setHofLoading(false);
+          if (!error && data) setHallOfFame(data);
+        });
+    }
+  }, [activeTab]);
+
+  const totalScore = scores.mode === 'team'
+    ? scores.teams.reduce((s, t) => s + t.score, 0)
+    : scores.players.reduce((s, p) => s + p.score, 0);
+  const sorted = scores.mode === 'team'
+    ? [...scores.teams].sort((a, b) => b.score - a.score)
+    : [...scores.players].sort((a, b) => b.score - a.score);
   const winner = sorted.length > 0 ? sorted[0] : null;
 
+  const getMedal = (i: number) => i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`;
+
+  const formatDate = (iso: string) => {
+    try { return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); }
+    catch { return iso; }
+  };
+
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 py-6 relative">
-      <div className="max-w-xl w-full">
-        <div className="flex justify-center mb-6">
-          <GuessWhatLogo size={64} />
+    <div className="min-h-screen flex flex-col items-center justify-start px-4 py-6 relative overflow-hidden">
+      {/* Confetti */}
+      {showConfetti && (
+        <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
+          {confettiPieces.map(p => (
+            <div key={p.id} style={{
+              position: 'absolute', top: '-20px', left: `${p.left}%`,
+              width: `${p.size}px`, height: `${p.size}px`,
+              backgroundColor: p.color,
+              borderRadius: p.isCircle ? '50%' : '2px',
+              animation: `confettiFall ${p.duration}s ease-in ${p.delay}s both`,
+            }} />
+          ))}
+          <style>{`
+            @keyframes confettiFall {
+              0% { transform: translateY(-20px) rotate(0deg); opacity: 1; }
+              100% { transform: translateY(110vh) rotate(720deg); opacity: 0; }
+            }
+          `}</style>
         </div>
+      )}
+
+      <div className="max-w-2xl w-full relative z-10">
+        {/* Logo */}
+        <div className="flex justify-center mb-5">
+          <GuessWhatLogo size={56} />
+        </div>
+
+        {/* Winner Banner */}
         {winner && (
-          <div className="text-center mb-8">
-            <SoftIcon icon={Trophy} color="#eab308" size="lg" className="mx-auto mb-4" />
-            <h1 className="text-4xl sm:text-5xl font-black mb-2">
-              <GradientText>{winner.name} Wins!</GradientText>
+          <div className="text-center mb-6 relative">
+            <div className="inline-block relative">
+              <div className="text-7xl mb-2" style={{ filter: 'drop-shadow(0 0 20px rgba(234,179,8,0.6))' }}>🏆</div>
+              <div className="absolute -top-1 -right-1 text-2xl animate-bounce">✨</div>
+            </div>
+            <h1 className="text-3xl sm:text-4xl font-black text-white mb-1">
+              <span style={{ background: 'linear-gradient(135deg, #eab308, #f97316, #ec4899)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+                {winner.name} Wins!
+              </span>
             </h1>
-            <p className="text-white/40">The champion!</p>
+            <p className="text-white/50 text-sm">🎉 Crowned the Meme Champion!</p>
           </div>
         )}
 
-        <div className="rounded-2xl p-6 mb-6" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-bold flex items-center gap-2"><Trophy className="w-5 h-5 text-yellow-400" /> Final Scores</h2>
-            <span className="text-sm text-white/40">Total: {totalScore} pts</span>
-          </div>
-
-          <div className="space-y-3">
-            {sorted.map((item, idx) => (
-              <div key={item.id} className="p-4 rounded-xl flex items-center gap-4" style={{ background: idx === 0 ? 'rgba(234,179,8,0.1)' : 'rgba(255,255,255,0.03)', border: idx === 0 ? '1px solid rgba(234,179,8,0.3)' : '1px solid rgba(255,255,255,0.05)' }}>
-                <span className="w-10 text-center font-black" style={{ color: idx === 0 ? '#eab308' : 'rgba(255,255,255,0.55)' }}>{idx < 3 ? `#${idx + 1}` : idx + 1}</span>
-                <SoftIcon icon={('emoji' in item) ? Users : User} color={('color' in item) ? (item as Team).color : '#a855f7'} size="sm" />
-                <div className="flex-1">
-                  <p className="font-bold">{item.name}</p>
-                  <div className="mt-1 w-full h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.05)' }}>
-                    <div className="h-full rounded-full" style={{ width: `${sorted[0]?.score ? (item.score / sorted[0].score) * 100 : 0}%`, background: ('color' in item) ? (item as Team).color : '#a855f7' }} />
-                  </div>
-                </div>
-                <p className="font-bold text-xl" style={{ color: ('color' in item) ? (item as Team).color : '#a855f7' }}>{item.score}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="grid grid-cols-3 gap-3 mb-6">
-          {[
-            { n: rounds, label: 'Rounds', color: '#a855f7' },
-            { n: totalScore, label: 'Total Points', color: '#ec4899' },
-            { n: `${timePerQ}s`, label: 'Per Question', color: '#22c55e' },
-          ].map((s, i) => (
-            <div key={i} className="rounded-xl p-4 text-center" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
-              <p className="text-2xl font-bold" style={{ color: s.color }}>{s.n}</p>
-              <p className="text-xs text-white/40">{s.label}</p>
-            </div>
+        {/* Tabs */}
+        <div className="flex gap-2 mb-5 p-1 rounded-2xl" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
+          {([['match', '🎮 This Match'], ['halloffame', '🏆 Hall of Fame']] as const).map(([tab, label]) => (
+            <button key={tab} onClick={() => setActiveTab(tab)}
+              className="flex-1 py-2.5 rounded-xl font-bold text-sm transition-all"
+              style={{
+                background: activeTab === tab ? 'linear-gradient(135deg, #a855f7, #ec4899)' : 'transparent',
+                color: activeTab === tab ? 'white' : 'rgba(255,255,255,0.45)',
+                boxShadow: activeTab === tab ? '0 4px 15px rgba(168,85,247,0.35)' : 'none',
+              }}>
+              {label}
+            </button>
           ))}
         </div>
 
-        <div className="space-y-3">
-          <button className="w-full py-4 rounded-xl text-lg font-bold text-white flex items-center justify-center gap-2 transition-all active:scale-[0.98]" style={{ background: 'linear-gradient(135deg, #a855f7, #ec4899)' }} onClick={onPlayAgain}>
-            <RotateCcw className="w-5 h-5" /> Play Again
-          </button>
-          <div className="grid grid-cols-2 gap-3">
-            <button className="py-3 rounded-xl font-semibold text-white/60 flex items-center justify-center gap-2 transition-all" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }} onClick={onNewSetup}>
-              <Users className="w-4 h-4" /> New Setup
-            </button>
-            <button className="py-3 rounded-xl font-semibold text-white/60 flex items-center justify-center gap-2 transition-all" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }} onClick={onHome}>
-              <Home className="w-4 h-4" /> Home
-            </button>
+        {/* TAB: This Match */}
+        {activeTab === 'match' && (
+          <div>
+            {/* Rankings */}
+            <div className="rounded-2xl p-5 mb-4" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.09)', backdropFilter: 'blur(12px)' }}>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="font-black text-white flex items-center gap-2">
+                  <span style={{ color: '#eab308' }}>⚡</span> Final Rankings
+                </h2>
+                <span className="text-xs px-3 py-1 rounded-full font-semibold" style={{ background: 'rgba(234,179,8,0.15)', color: '#eab308', border: '1px solid rgba(234,179,8,0.25)' }}>
+                  {totalScore} pts total
+                </span>
+              </div>
+
+              {sorted.length === 0 ? (
+                <div className="text-center py-8">
+                  <div className="text-4xl mb-3">🎯</div>
+                  <p className="text-white/40">No players or teams tracked.</p>
+                </div>
+              ) : (
+                <div className="space-y-2.5">
+                  {sorted.map((item, idx) => {
+                    const isTeam = 'emoji' in item;
+                    const teamItem = item as Team;
+                    const playerItem = item as Player;
+                    const itemColor = isTeam ? teamItem.color : '#a855f7';
+                    const barPct = sorted[0]?.score ? (item.score / sorted[0].score) * 100 : 0;
+                    const isWinner = idx === 0;
+
+                    return (
+                      <div key={item.id}
+                        className="p-4 rounded-xl flex items-center gap-3 transition-all"
+                        style={{
+                          background: isWinner
+                            ? `linear-gradient(135deg, rgba(234,179,8,0.12), rgba(249,115,22,0.08))`
+                            : 'rgba(255,255,255,0.03)',
+                          border: isWinner ? '1px solid rgba(234,179,8,0.35)' : '1px solid rgba(255,255,255,0.06)',
+                          boxShadow: isWinner ? '0 0 20px rgba(234,179,8,0.12)' : 'none',
+                        }}>
+
+                        {/* Medal / Rank */}
+                        <div className="w-10 text-center">
+                          <span className="text-2xl">{getMedal(idx)}</span>
+                        </div>
+
+                        {/* Avatar */}
+                        <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl shrink-0"
+                          style={{ background: `${itemColor}20`, border: `1px solid ${itemColor}40` }}>
+                          {isTeam ? teamItem.emoji : '👤'}
+                        </div>
+
+                        {/* Info */}
+                        <div className="flex-1 min-w-0">
+                          <p className="font-bold text-white truncate">{item.name}</p>
+                          <div className="flex items-center gap-2 mt-1">
+                            {!isTeam && playerItem.bestStreak >= 2 && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded-md font-bold" style={{ background: 'rgba(249,115,22,0.2)', color: '#f97316' }}>🔥 {playerItem.bestStreak}x</span>
+                            )}
+                            {!isTeam && playerItem.correctAnswers > 0 && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded-md font-bold" style={{ background: 'rgba(34,197,94,0.15)', color: '#22c55e' }}>✓ {playerItem.correctAnswers}/{playerItem.totalAnswers}</span>
+                            )}
+                          </div>
+                          <div className="mt-1.5 w-full h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.07)' }}>
+                            <div className="h-full rounded-full transition-all duration-700" style={{ width: `${barPct}%`, background: `linear-gradient(90deg, ${itemColor}, ${itemColor}88)`, boxShadow: `0 0 6px ${itemColor}60` }} />
+                          </div>
+                        </div>
+
+                        {/* Score */}
+                        <div className="text-right shrink-0">
+                          <p className="text-2xl font-black" style={{ color: itemColor, textShadow: `0 0 12px ${itemColor}60` }}>{item.score}</p>
+                          <p className="text-[10px] text-white/30">pts</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Game Stats */}
+            <div className="grid grid-cols-3 gap-3 mb-5">
+              {[
+                { val: rounds, label: 'Rounds', color: '#a855f7', icon: '🎯' },
+                { val: totalScore, label: 'Total Pts', color: '#ec4899', icon: '⚡' },
+                { val: `${timePerQ}s`, label: 'Per Q', color: '#22c55e', icon: '⏱️' },
+              ].map((s, i) => (
+                <div key={i} className="rounded-xl p-4 text-center" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                  <div className="text-lg mb-0.5">{s.icon}</div>
+                  <p className="text-xl font-black" style={{ color: s.color }}>{s.val}</p>
+                  <p className="text-[10px] text-white/40 mt-0.5">{s.label}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* Feedback prompt */}
+            <div className="rounded-2xl p-4 mb-5 flex items-center gap-3 cursor-pointer transition-all hover:scale-[1.01] active:scale-[0.99]" style={{ background: 'linear-gradient(135deg, rgba(168,85,247,0.12), rgba(236,72,153,0.08))', border: '1px solid rgba(168,85,247,0.25)' }} onClick={onFeedback}>
+              <div className="text-2xl">💬</div>
+              <div className="flex-1">
+                <p className="font-bold text-white text-sm">Share your thoughts!</p>
+                <p className="text-xs text-white/50">Suggest a meme, report an issue, or just say hi.</p>
+              </div>
+              <span className="text-white/40 text-lg">›</span>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="space-y-3">
+              <button
+                className="w-full py-4 rounded-xl text-base font-black text-white flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
+                style={{ background: 'linear-gradient(135deg, #a855f7, #ec4899)', boxShadow: '0 8px 30px rgba(168,85,247,0.4)' }}
+                onClick={onPlayAgain}>
+                <RotateCcw className="w-5 h-5" /> Play Again
+              </button>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  className="py-3 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
+                  style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.7)' }}
+                  onClick={onNewSetup}>
+                  <Users className="w-4 h-4" /> New Setup
+                </button>
+                <button
+                  className="py-3 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
+                  style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.7)' }}
+                  onClick={onHome}>
+                  <Home className="w-4 h-4" /> Home
+                </button>
+              </div>
+            </div>
           </div>
-        </div>
+        )}
+
+        {/* TAB: Hall of Fame */}
+        {activeTab === 'halloffame' && (
+          <div>
+            <div className="rounded-2xl p-5 mb-4" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.09)', backdropFilter: 'blur(12px)' }}>
+              <div className="flex items-center gap-2 mb-4">
+                <span className="text-xl">🌟</span>
+                <h2 className="font-black text-white">All-Time Leaderboard</h2>
+              </div>
+
+              {hofLoading ? (
+                <div className="flex flex-col items-center justify-center py-12 gap-3">
+                  <div className="w-8 h-8 rounded-full border-2 border-purple-500 border-t-transparent animate-spin" />
+                  <p className="text-white/40 text-sm">Loading legends...</p>
+                </div>
+              ) : hallOfFame.length === 0 ? (
+                <div className="text-center py-10">
+                  <div className="text-5xl mb-3">🏜️</div>
+                  <p className="text-white/50 font-semibold">No records yet!</p>
+                  <p className="text-white/30 text-sm mt-1">Play a game to be the first legend.</p>
+                </div>
+              ) : (
+                <div className="space-y-2.5">
+                  {hallOfFame.map((entry, idx) => {
+                    const rankColors = ['#eab308', '#94a3b8', '#f97316'];
+                    const rankColor = idx < 3 ? rankColors[idx] : 'rgba(255,255,255,0.4)';
+                    const results = entry.mode === 'team' ? (entry.team_results || []) : (entry.player_results || []);
+                    const topResult = results.sort ? [...results].sort((a: any, b: any) => b.score - a.score)[0] : null;
+
+                    return (
+                      <div key={entry.id} className="p-4 rounded-xl" style={{ background: idx === 0 ? 'linear-gradient(135deg, rgba(234,179,8,0.12), rgba(249,115,22,0.08))' : 'rgba(255,255,255,0.03)', border: idx === 0 ? '1px solid rgba(234,179,8,0.3)' : '1px solid rgba(255,255,255,0.06)' }}>
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 text-center">
+                            <span className="text-xl">{getMedal(idx)}</span>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-bold text-white truncate">{entry.winner_name}</p>
+                            <p className="text-xs text-white/40">{formatDate(entry.created_at)} · {entry.rounds} rounds · {entry.mode}</p>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <p className="text-xl font-black" style={{ color: rankColor }}>{entry.total_score}</p>
+                            <p className="text-[10px] text-white/30">pts</p>
+                          </div>
+                        </div>
+                        {topResult && (
+                          <div className="mt-2 ml-13 flex items-center gap-1.5 flex-wrap">
+                            {results.slice(0, 3).map((r: any) => (
+                              <span key={r.name} className="text-[10px] px-2 py-0.5 rounded-full" style={{ background: 'rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.55)', border: '1px solid rgba(255,255,255,0.1)' }}>
+                                {r.emoji ? `${r.emoji} ` : ''}{r.name}: {r.score}pts
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-3">
+              <button
+                className="w-full py-4 rounded-xl text-base font-black text-white flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
+                style={{ background: 'linear-gradient(135deg, #a855f7, #ec4899)', boxShadow: '0 8px 30px rgba(168,85,247,0.4)' }}
+                onClick={onPlayAgain}>
+                <RotateCcw className="w-5 h-5" /> Play Again
+              </button>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  className="py-3 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
+                  style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.7)' }}
+                  onClick={onNewSetup}>
+                  <Users className="w-4 h-4" /> New Setup
+                </button>
+                <button
+                  className="py-3 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
+                  style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.7)' }}
+                  onClick={onHome}>
+                  <Home className="w-4 h-4" /> Home
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -2503,14 +2926,68 @@ const AdminLogin: React.FC<{
 // ==================== MAIN APP ====================
 const App: React.FC = () => {
   const [screen, setScreen] = useState<GameScreen>('loading');
+  const screenRef = useRef<GameScreen>('loading');
   const [content, setContent] = useState<GameContent[]>([]);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const [showFeedback, setShowFeedback] = useState(false);
+  const [showExitApp, setShowExitApp] = useState(false);
 
   const [isDark] = useState(true);
   const toggleTheme = () => {};
 
   const [isAdmin, setIsAdmin] = useState(false);
   const [adminEmail, setAdminEmail] = useState<string | null>(null);
+  const [showExitConfirm, setShowExitConfirm] = useState(false);
+
+  // Keep screenRef in sync with screen so popstate handler has current value
+  const navigateToScreen = (s: GameScreen) => {
+    screenRef.current = s;
+    setScreen(s);
+    // Push a new history entry so back button has something to intercept
+    window.history.pushState({ screen: s }, '', window.location.href);
+  };
+
+  // Back-button / device back button interception
+  useEffect(() => {
+    // Seed the initial history entry
+    window.history.replaceState({ screen: 'loading' }, '', window.location.href);
+
+    const handlePopState = () => {
+      const currentScreen = screenRef.current;
+
+      // For active gameplay, intercept back and show exit game confirm
+      if (currentScreen === 'playing' || currentScreen === 'reveal') {
+        // Re-push the current state so next back press triggers again
+        window.history.pushState({ screen: currentScreen }, '', window.location.href);
+        setShowExitConfirm(true);
+        return;
+      }
+
+      // For home screen, show exit app confirm
+      if (currentScreen === 'home') {
+        window.history.pushState({ screen: 'home' }, '', window.location.href);
+        setShowExitApp(true);
+        return;
+      }
+
+      // Parent screen map for all other screens
+      const parentMap: Partial<Record<GameScreen, GameScreen>> = {
+        'admin-login': 'home',
+        'admin': 'home',
+        'setup': 'home',
+        'lobby': 'setup',
+        'scoreboard': 'home',
+        'loading': 'home',
+      };
+      const parent = parentMap[currentScreen] ?? 'home';
+      screenRef.current = parent;
+      setScreen(parent);
+      window.history.replaceState({ screen: parent }, '', window.location.href);
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -2535,9 +3012,24 @@ const App: React.FC = () => {
     currentQuestion: null as GameContent | null,
   });
   const [gameStats, setGameStats] = useState(loadStats);
-  const [showExitConfirm, setShowExitConfirm] = useState(false);
 
-  const navigate = (s: GameScreen) => setScreen(s);
+  const navigate = (s: GameScreen) => navigateToScreen(s);
+
+  // Save game results to Supabase scoreboard table
+  const saveGameResults = async (players: Player[], teams: Team[], mode: GameMode, numRounds: number, totalScore: number, winnerName: string) => {
+    try {
+      await supabase.from('scoreboard').insert([{
+        mode,
+        rounds: numRounds,
+        total_score: totalScore,
+        winner_name: winnerName,
+        player_results: mode === 'individual' ? players.map(p => ({ name: p.name, score: p.score, streak: p.streak, bestStreak: p.bestStreak, correctAnswers: p.correctAnswers, totalAnswers: p.totalAnswers })) : null,
+        team_results: mode === 'team' ? teams.map(t => ({ name: t.name, score: t.score, color: t.color, emoji: t.emoji })) : null,
+      }]);
+    } catch (err) {
+      console.error('Failed to save game results to Supabase scoreboard:', err);
+    }
+  };
 
   const refreshContent = async () => {
     try {
@@ -2585,10 +3077,10 @@ const App: React.FC = () => {
       currentIdx: 0,
       currentQuestion: questions[0],
     });
-    setScreen('lobby');
+    navigateToScreen('lobby');
   };
 
-  const handleReveal = () => setScreen('reveal');
+  const handleReveal = () => navigateToScreen('reveal');
 
   const handleNext = (winnerId: string | 'nobody') => {
     const q = gameState.currentQuestion;
@@ -2614,13 +3106,22 @@ const App: React.FC = () => {
       saveStats(stats);
       setGameStats(stats);
       setGameState(prev => ({ ...prev, players: updatedPlayers, teams: updatedTeams }));
-      setScreen('scoreboard');
+
+      // Save to Supabase
+      const finalMode: GameMode = gameSettings?.mode || 'individual';
+      const allEntities = finalMode === 'team' ? updatedTeams : updatedPlayers;
+      const sorted = [...allEntities].sort((a, b) => b.score - a.score);
+      const winnerName = sorted[0]?.name || 'Unknown';
+      const totalScore = sorted.reduce((s, e) => s + e.score, 0);
+      saveGameResults(updatedPlayers, updatedTeams, finalMode, gameState.questions.length, totalScore, winnerName);
+
+      navigateToScreen('scoreboard');
     } else {
       setGameState(prev => ({
         ...prev, players: updatedPlayers, teams: updatedTeams,
         currentIdx: nextIdx, currentQuestion: prev.questions[nextIdx],
       }));
-      setScreen('playing');
+      navigateToScreen('playing');
     }
   };
 
@@ -2631,7 +3132,16 @@ const App: React.FC = () => {
     saveStats(stats);
     setGameStats(stats);
     setShowExitConfirm(false);
-    setScreen('scoreboard');
+
+    // Save partial results to Supabase
+    const finalMode: GameMode = gameSettings?.mode || 'individual';
+    const allEntities = finalMode === 'team' ? gameState.teams : gameState.players;
+    const sorted = [...allEntities].sort((a, b) => b.score - a.score);
+    const winnerName = sorted[0]?.name || 'Unknown';
+    const totalScore = sorted.reduce((s, e) => s + e.score, 0);
+    saveGameResults(gameState.players, gameState.teams, finalMode, gameState.currentIdx + 1, totalScore, winnerName);
+
+    navigateToScreen('scoreboard');
   };
 
   const handlePlayAgain = () => {
@@ -2658,12 +3168,12 @@ const App: React.FC = () => {
       currentIdx: 0,
       currentQuestion: questions[0],
     }));
-    setScreen('lobby');
+    navigateToScreen('lobby');
   };
 
   const handleNewSetup = () => {
     setGameState({ players: [], teams: [], questions: [], currentIdx: 0, currentQuestion: null });
-    setScreen('setup');
+    navigateToScreen('setup');
   };
 
   const [alertInfo, setAlertInfo] = useState<{ open: boolean; title: string; message: string }>({ open: false, title: '', message: '' });
@@ -2678,8 +3188,26 @@ const App: React.FC = () => {
     ? Math.min(gameState.currentIdx + 1, gameState.questions.length)
     : (gameSettings?.rounds || 0);
 
+  // Hide FAB on loading screen
+  const showFAB = screen !== 'loading';
+
   return (
     <AnimatedBg isDark={isDark}>
+      {/* Feedback Modal */}
+      <FeedbackModal open={showFeedback} onClose={() => setShowFeedback(false)} currentScreen={screen} />
+
+      {/* Exit App Confirmation */}
+      <ConfirmModal
+        open={showExitApp}
+        title="Leave the game? 👋"
+        message="You're about to exit. Your current session will not be saved. See you next time!"
+        confirmLabel="Exit App"
+        cancelLabel="Stay"
+        destructive
+        onCancel={() => setShowExitApp(false)}
+        onConfirm={() => { setShowExitApp(false); window.history.go(-1); }}
+      />
+
       <AlertModal open={alertInfo.open} title={alertInfo.title} message={alertInfo.message} onOk={() => setAlertInfo({ open: false, title: '', message: '' })} />
       <ConfirmModal
         open={showExitConfirm}
@@ -2690,15 +3218,12 @@ const App: React.FC = () => {
         onCancel={() => setShowExitConfirm(false)}
         onConfirm={confirmExitGame}
       />
-      {screen === 'loading' && <LoadingScreen onComplete={() => setScreen('home')} />}
+
+      {screen === 'loading' && <LoadingScreen onComplete={() => { screenRef.current = 'home'; setScreen('home'); window.history.replaceState({ screen: 'home' }, '', window.location.href); }} />}
       {screen === 'home' && <HomeScreen
         onNavigate={(s) => {
           if (s === 'admin') {
-            if (isAdmin) {
-              navigate('admin');
-            } else {
-              navigate('admin-login');
-            }
+            if (isAdmin) { navigate('admin'); } else { navigate('admin-login'); }
           } else {
             navigate(s);
           }
@@ -2721,7 +3246,7 @@ const App: React.FC = () => {
         adminEmail={adminEmail}
       />}
       {screen === 'setup' && <GameSetup onBack={() => navigate('home')} onStart={handleStartGame} isDark={isDark} onToggleTheme={toggleTheme} />}
-      {screen === 'lobby' && gameSettings && <GameLobby settings={gameSettings} onStart={() => setScreen('playing')} onBack={() => navigate('setup')} isDark={isDark} onToggleTheme={toggleTheme} />}
+      {screen === 'lobby' && gameSettings && <GameLobby settings={gameSettings} onStart={() => navigateToScreen('playing')} onBack={() => navigate('setup')} isDark={isDark} onToggleTheme={toggleTheme} />}
       {screen === 'playing' && gameState.currentQuestion && (
         <GamePlay question={gameState.currentQuestion} roundNumber={gameState.currentIdx + 1} totalRounds={gameState.questions.length} timePerQ={gameSettings?.timePerQ || 30} onReveal={handleReveal} onExit={() => setShowExitConfirm(true)} players={gameState.players} teams={gameState.teams} mode={gameSettings?.mode || 'individual'} />
       )}
@@ -2729,13 +3254,37 @@ const App: React.FC = () => {
         <RevealScreen question={gameState.currentQuestion} roundNumber={gameState.currentIdx + 1} totalRounds={gameState.questions.length} scores={{ players: gameState.players, teams: gameState.teams, mode: gameSettings?.mode || 'individual' }} currentIdx={gameState.currentIdx} onNext={handleNext} />
       )}
       {screen === 'scoreboard' && (
-        <Scoreboard scores={{ players: gameState.players, teams: gameState.teams, mode: gameSettings?.mode || 'individual' }} rounds={scorecardRounds} timePerQ={gameSettings?.timePerQ || 30} onPlayAgain={handlePlayAgain} onNewSetup={handleNewSetup} onHome={() => setScreen('home')} isDark={isDark} onToggleTheme={toggleTheme} />
+        <Scoreboard scores={{ players: gameState.players, teams: gameState.teams, mode: gameSettings?.mode || 'individual' }} rounds={scorecardRounds} timePerQ={gameSettings?.timePerQ || 30} onPlayAgain={handlePlayAgain} onNewSetup={handleNewSetup} onHome={() => navigate('home')} isDark={isDark} onToggleTheme={toggleTheme} onFeedback={() => setShowFeedback(true)} />
       )}
+
       {fetchError && (
-        <div className="fixed bottom-4 left-4 right-4 z-50 p-4 rounded-xl bg-red-500/20 border border-red-500/30 text-red-200 text-sm flex justify-between items-center" style={{ backdropFilter: 'blur(8px)' }}>
+        <div className="fixed bottom-20 left-4 right-4 z-50 p-4 rounded-xl bg-red-500/20 border border-red-500/30 text-red-200 text-sm flex justify-between items-center" style={{ backdropFilter: 'blur(8px)' }}>
           <span>{fetchError} (Using offline local backup)</span>
           <button onClick={() => setFetchError(null)} className="text-xs underline ml-2 hover:text-white transition-colors">Dismiss</button>
         </div>
+      )}
+
+      {/* Floating Feedback Button (FAB) */}
+      {showFAB && (
+        <button
+          id="feedback-fab"
+          onClick={() => setShowFeedback(true)}
+          className="fixed z-[150] flex items-center gap-2 font-bold text-white transition-all active:scale-95 hover:scale-105 select-none"
+          style={{
+            bottom: '20px',
+            right: '16px',
+            padding: '10px 16px',
+            borderRadius: '50px',
+            background: 'linear-gradient(135deg, #a855f7, #ec4899)',
+            boxShadow: '0 4px 20px rgba(168,85,247,0.5), 0 2px 8px rgba(0,0,0,0.3)',
+            fontSize: '13px',
+            letterSpacing: '0.01em',
+          }}
+          aria-label="Open feedback form"
+        >
+          <span>💬</span>
+          <span>Feedback</span>
+        </button>
       )}
     </AnimatedBg>
   );
