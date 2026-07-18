@@ -1501,16 +1501,48 @@ const GameSetup: React.FC<{
   const [playerError, setPlayerError] = useState('');
 
   const handleStart = () => {
-    if (mode === 'individual' && players.length === 0) {
+    let currentPlayers = [...players];
+    let currentTeams = [...teams];
+
+    if (mode === 'individual' && newPlayerName.trim()) {
+      const pName = newPlayerName.trim();
+      if (!currentPlayers.some(p => p.name === pName)) {
+        currentPlayers.push({
+          id: Date.now().toString(),
+          name: pName,
+          score: 0,
+          streak: 0,
+          bestStreak: 0,
+          correctAnswers: 0,
+          totalAnswers: 0,
+        });
+      }
+    }
+
+    if (mode === 'team' && newTeamName.trim()) {
+      const tName = newTeamName.trim();
+      if (!currentTeams.some(t => t.name === tName)) {
+        const idx = currentTeams.length;
+        currentTeams.push({
+          id: Date.now().toString(),
+          name: tName,
+          score: 0,
+          color: TEAM_COLORS[idx % TEAM_COLORS.length],
+          emoji: TEAM_EMOJIS[idx % TEAM_EMOJIS.length],
+        });
+      }
+    }
+
+    if (mode === 'individual' && currentPlayers.length === 0) {
       setPlayerError('Please add at least one player name before starting.');
       return;
     }
-    if (mode === 'team' && teams.length < 2) {
+    if (mode === 'team' && currentTeams.length < 2) {
       setPlayerError('Please add at least 2 teams before starting.');
       return;
     }
     setPlayerError('');
-    onStart({ mode, teams, players, rounds, playUnlimited, timePerQ, categories, questionTypes });
+    onStart({ mode, teams: currentTeams, players: currentPlayers, rounds, playUnlimited, timePerQ, categories, questionTypes });
   };
 
   return (
@@ -1622,7 +1654,7 @@ const GameSetup: React.FC<{
             <div className="flex gap-2 mb-4">
               <input className="flex-1 rounded-xl px-4 py-3 text-white outline-none text-sm"
                 style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}
-                placeholder="Team name..." value={newTeamName} onChange={e => setNewTeamName(e.target.value)} onKeyDown={e => e.key === 'Enter' && addTeam()} />
+                placeholder="Enter team name (or start directly after typing)" value={newTeamName} onChange={e => setNewTeamName(e.target.value)} onKeyDown={e => e.key === 'Enter' && addTeam()} />
               <button className="px-4 rounded-xl text-white flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #a855f7, #ec4899)' }} onClick={addTeam}>
                 ➕
               </button>
@@ -1647,7 +1679,7 @@ const GameSetup: React.FC<{
             <div className="flex gap-2 mb-4">
               <input className="flex-1 rounded-xl px-4 py-3 text-white outline-none text-sm"
                 style={{ background: 'rgba(255,255,255,0.06)', border: `1px solid ${playerError ? 'rgba(239,68,68,0.5)' : 'rgba(255,255,255,0.12)'}` }}
-                placeholder="Enter player name and press Enter or +" value={newPlayerName} onChange={e => { setNewPlayerName(e.target.value); if (playerError) setPlayerError(''); }} onKeyDown={e => e.key === 'Enter' && addPlayer()} />
+                placeholder="Enter player name (or start directly after typing)" value={newPlayerName} onChange={e => { setNewPlayerName(e.target.value); if (playerError) setPlayerError(''); }} onKeyDown={e => e.key === 'Enter' && addPlayer()} />
               <button className="px-4 rounded-xl text-white flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #a855f7, #ec4899)' }} onClick={addPlayer}>
                 ➕
               </button>
@@ -1778,16 +1810,22 @@ const GamePlay: React.FC<{
   const [hasAnswered, setHasAnswered] = useState(false);
   const [showHint, setShowHint] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
+  const [showTurnSplash, setShowTurnSplash] = useState(true);
+  const [audioPlaying, setAudioPlaying] = useState(false);
+  const [waveHeights, setWaveHeights] = useState<number[]>(Array(15).fill(4));
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     setHasAnswered(false);
     setTimeLeft(timePerQ);
     setShowHint(false);
     setIsPaused(false);
+    setShowTurnSplash(true);
   }, [question.id, timePerQ]);
 
   useEffect(() => {
+    if (showTurnSplash) return;
     if (isPaused) return;
     if (hasAnswered) return;
     if (timeLeft <= 0) {
@@ -1797,7 +1835,69 @@ const GamePlay: React.FC<{
     }
     timerRef.current = setInterval(() => setTimeLeft(t => t - 1), 1000);
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [timeLeft, hasAnswered, isPaused, onReveal]);
+  }, [timeLeft, hasAnswered, isPaused, showTurnSplash, onReveal]);
+
+  // Audio Playback Autoplay Logic (1-second delay after Turn Splash is dismissed)
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+    setAudioPlaying(false);
+
+    if (question.audioData && !showTurnSplash) {
+      const audio = new Audio(question.audioData);
+      audioRef.current = audio;
+
+      const playTimeout = setTimeout(() => {
+        if (audioRef.current && !isPaused && !hasAnswered) {
+          audio.play()
+            .then(() => setAudioPlaying(true))
+            .catch(err => {
+              console.error("Audio playback failed or was blocked:", err);
+            });
+        }
+      }, 1000);
+
+      audio.onended = () => {
+        setAudioPlaying(false);
+      };
+
+      return () => {
+        clearTimeout(playTimeout);
+        audio.pause();
+        audioRef.current = null;
+      };
+    }
+  }, [question.id, showTurnSplash]);
+
+  // Pause / Resume and Reveal handling for audio
+  useEffect(() => {
+    if (!audioRef.current) return;
+
+    if (isPaused || hasAnswered) {
+      audioRef.current.pause();
+      setAudioPlaying(false);
+    } else if (!showTurnSplash) {
+      audioRef.current.play()
+        .then(() => setAudioPlaying(true))
+        .catch(() => {});
+    }
+  }, [isPaused, hasAnswered, showTurnSplash]);
+
+  // Audio Wave Visualizer animation interval
+  useEffect(() => {
+    if (!audioPlaying) {
+      setWaveHeights(Array(15).fill(4));
+      return;
+    }
+    const interval = setInterval(() => {
+      setWaveHeights(
+        Array.from({ length: 15 }, () => Math.floor(Math.random() * 32) + 8)
+      );
+    }, 150);
+    return () => clearInterval(interval);
+  }, [audioPlaying]);
 
   const progress = ((roundNumber - 1) / totalRounds) * 100;
   const timerPct = (timeLeft / timePerQ) * 100;
@@ -1822,6 +1922,48 @@ const GamePlay: React.FC<{
   };
 
   const entities = mode === 'team' ? teams : players;
+  const turnHolder = entities.length > 0 ? entities[(roundNumber - 1) % entities.length] : null;
+
+  // Turn Splash Screen
+  if (showTurnSplash && turnHolder) {
+    const isTeam = mode === 'team';
+    const borderCol = isTeam ? (turnHolder as Team).color : '#3b82f6';
+    const bgCol = isTeam ? `${(turnHolder as Team).color}10` : 'rgba(59,130,246,0.1)';
+    const emoji = isTeam ? (turnHolder as Team).emoji : '👤';
+
+    return (
+      <div className="min-h-screen flex items-center justify-center px-4 relative">
+        <div className="max-w-xl w-full text-center p-8 rounded-3xl border animate-scaleIn bg-theme-card"
+          style={{ borderColor: borderCol, background: bgCol, backdropFilter: 'blur(15px)' }}>
+          <div className="w-24 h-24 rounded-full mx-auto mb-6 flex items-center justify-center bg-white/10 text-5xl shadow-lg border border-white/20 animate-bounce">
+            {emoji}
+          </div>
+          
+          <p className="text-sm font-semibold uppercase tracking-wider text-theme-muted mb-2">
+            {isTeam ? 'Team Turn' : 'Player Turn'}
+          </p>
+          
+          <h1 className="text-4xl sm:text-5xl font-black mb-6 text-theme-main">
+            {turnHolder.name}
+          </h1>
+          
+          <p className="text-theme-muted mb-8 max-w-sm mx-auto text-sm">
+            It's your turn to answer this question. Ready to show what you've got?
+          </p>
+          
+          <button
+            className="w-full py-4 rounded-xl text-lg font-bold text-white flex items-center justify-center gap-3 transition-all active:scale-[0.98] cursor-pointer animate-pulse"
+            style={{ 
+              background: `linear-gradient(135deg, ${borderCol}, #ec4899)`,
+              boxShadow: `0 8px 25px ${borderCol}40`
+            }} 
+            onClick={() => setShowTurnSplash(false)}>
+            ▶️ Reveal Question
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col px-4 py-4">
@@ -1917,19 +2059,63 @@ const GamePlay: React.FC<{
                 </div>
               )}
               {question.audioData && (
-                <div className="mb-4 p-4 rounded-xl flex items-center gap-3" style={{ background: 'rgba(6,182,212,0.08)', border: '1px solid rgba(6,182,212,0.15)' }}>
-                  <div className="w-12 h-12 rounded-full flex items-center justify-center" style={{ background: 'rgba(6,182,212,0.2)' }}><span className="text-xl">🎤</span></div>
-                  <div className="flex-1"><audio src={question.audioData} controls className="w-full" /></div>
-                </div>
-              )}
-              {question.type === 'song-tune' && question.audioHint && (
-                <div className="mb-4 p-4 rounded-xl" style={{ background: 'rgba(236,72,153,0.08)', border: '1px solid rgba(236,72,153,0.15)' }}>
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-xl">🎵</span>
-                    <span className="text-sm font-semibold" style={{ color: '#ec4899' }}>Audio Clue</span>
-                    <button onClick={() => setShowHint(!showHint)} className="ml-auto text-xs text-white/40 hover:text-white/60 underline">{showHint ? 'Hide' : 'Show'} Hint</button>
+                <div className="mb-6 p-6 rounded-2xl flex flex-col items-center justify-center gap-4 relative overflow-hidden"
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(6,182,212,0.08), rgba(168,85,247,0.08))',
+                    border: '1px solid rgba(168,85,247,0.15)'
+                  }}>
+                  <div className="w-16 h-16 rounded-full flex items-center justify-center relative bg-gradient-to-r from-cyan-500 to-purple-500 shadow-lg shadow-cyan-500/20">
+                    {audioPlaying ? (
+                      <span className="text-2xl animate-bounce">🎵</span>
+                    ) : (
+                      <span className="text-2xl">🔇</span>
+                    )}
+                    {audioPlaying && (
+                      <>
+                        <div className="absolute inset-0 rounded-full bg-cyan-500/30 animate-ping" />
+                        <div className="absolute -inset-2 rounded-full border border-cyan-500/20 animate-pulse" />
+                      </>
+                    )}
                   </div>
-                  {showHint ? <p className="text-sm text-white/60">{question.audioHint}</p> : <div className="flex items-center gap-1 h-6">{[14, 22, 10, 18, 26, 12, 20].map((h, i) => (<div key={i} className="w-1.5 rounded-full animate-pulse" style={{ height: `${h}px`, background: 'rgba(236,72,153,0.4)', animationDelay: `${i * 0.1}s` }} />))}</div>}
+                  
+                  <div className="text-center">
+                    <p className="font-bold text-sm text-cyan-400 uppercase tracking-widest">
+                      {audioPlaying ? 'Playing Audio Hint' : 'Get Ready to Listen...'}
+                    </p>
+                    <p className="text-xs text-white/50 mt-1">
+                      {audioPlaying ? 'Listen carefully to the music' : 'Audio will start automatically'}
+                    </p>
+                  </div>
+
+                  {/* Dynamic wave visualizer */}
+                  <div className="flex items-end justify-center gap-1.5 h-10 mt-2">
+                    {waveHeights.map((h, idx) => (
+                      <div
+                        key={idx}
+                        className="w-1.5 rounded-full bg-gradient-to-t from-cyan-400 to-purple-500 transition-all duration-150"
+                        style={{
+                          height: `${h}px`,
+                        }}
+                      />
+                    ))}
+                  </div>
+
+                  {question.audioHint && (
+                    <div className="mt-2 w-full max-w-md border-t border-white/5 pt-4 text-center">
+                      <button 
+                        type="button" 
+                        onClick={() => setShowHint(!showHint)} 
+                        className="text-xs text-white/40 hover:text-white/60 underline transition-colors"
+                      >
+                        {showHint ? 'Hide Text Clue' : 'Show Text Clue'}
+                      </button>
+                      {showHint && (
+                        <p className="text-sm text-white/70 mt-2 bg-white/5 p-3 rounded-xl border border-white/5 animate-slideDown">
+                          {question.audioHint}
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -2033,11 +2219,13 @@ const RevealScreen: React.FC<{
   roundNumber: number;
   totalRounds: number;
   scores: { players: Player[]; teams: Team[]; mode: GameMode };
+  currentIdx: number;
   onNext: (winnerId: string | 'nobody') => void;
-}> = ({ question, roundNumber, totalRounds, scores, onNext }) => {
+}> = ({ question, roundNumber, totalRounds, scores, currentIdx, onNext }) => {
   const [winnerId, setWinnerId] = useState<string | null>(null);
   const progress = (roundNumber / totalRounds) * 100;
   const entities = scores.mode === 'team' ? scores.teams : scores.players;
+  const turnHolder = entities.length > 0 ? entities[currentIdx % entities.length] : null;
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4 py-6">
@@ -2067,21 +2255,50 @@ const RevealScreen: React.FC<{
         </div>
 
         <div className="rounded-2xl p-6 mb-6 text-center" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
-          <h3 className="text-lg font-bold mb-4">Who gave the right answer?</h3>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            {entities.map(e => (
-              <button key={e.id} onClick={() => setWinnerId(e.id)}
-                className={`p-3 rounded-xl border-2 transition-all flex flex-col items-center gap-1 ${winnerId === e.id ? 'border-green-400 bg-green-400/20 shadow-[0_0_15px_rgba(34,197,94,0.3)]' : 'border-white/10 bg-white/5 hover:bg-white/10'}`}>
-                <span className="text-2xl">{('emoji' in e) ? (e as Team).emoji : '👤'}</span>
-                <span className="font-semibold text-sm truncate w-full px-1">{e.name}</span>
-              </button>
-            ))}
-            <button onClick={() => setWinnerId('nobody')}
-              className={`p-3 rounded-xl border-2 transition-all flex flex-col items-center gap-1 ${winnerId === 'nobody' ? 'border-red-400 bg-red-400/20 shadow-[0_0_15px_rgba(239,68,68,0.3)]' : 'border-white/10 bg-white/5 hover:bg-white/10'}`}>
-              <span className="text-2xl">❌</span>
-              <span className="font-semibold text-sm">Nobody</span>
-            </button>
-          </div>
+          {turnHolder ? (
+            <>
+              <h3 className="text-lg font-bold mb-2">Did they answer correctly?</h3>
+              <div className="flex items-center justify-center gap-3 p-4 rounded-xl mb-6 bg-white/5 border border-white/10">
+                <span className="text-3xl">
+                  {('emoji' in turnHolder) ? (turnHolder as Team).emoji : '👤'}
+                </span>
+                <div className="text-left">
+                  <p className="font-bold text-white text-lg">{turnHolder.name}</p>
+                  <p className="text-xs text-white/50">{scores.mode === 'team' ? 'Team Turn' : "Player's Turn"}</p>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <button
+                  type="button"
+                  onClick={() => setWinnerId('nobody')}
+                  className={`py-4 px-6 rounded-2xl border-2 transition-all flex flex-col items-center justify-center gap-2 cursor-pointer ${
+                    winnerId === 'nobody'
+                      ? 'border-red-500 bg-red-500/20 shadow-[0_0_15px_rgba(239,68,68,0.3)]'
+                      : 'border-white/10 bg-white/5 hover:bg-white/10'
+                  }`}
+                >
+                  <span className="text-3xl">❌</span>
+                  <span className="font-bold text-red-400 text-sm sm:text-base">No, Incorrect</span>
+                </button>
+                
+                <button
+                  type="button"
+                  onClick={() => setWinnerId(turnHolder.id)}
+                  className={`py-4 px-6 rounded-2xl border-2 transition-all flex flex-col items-center justify-center gap-2 cursor-pointer ${
+                    winnerId === turnHolder.id
+                      ? 'border-green-500 bg-green-500/20 shadow-[0_0_15px_rgba(34,197,94,0.3)]'
+                      : 'border-white/10 bg-white/5 hover:bg-white/10'
+                  }`}
+                >
+                  <span className="text-3xl">✅</span>
+                  <span className="font-bold text-green-400 text-sm sm:text-base">Yes, Correct!</span>
+                </button>
+              </div>
+            </>
+          ) : (
+            <p className="text-white/40 text-sm">No turn holder found</p>
+          )}
         </div>
 
         <button
@@ -2509,7 +2726,7 @@ const App: React.FC = () => {
         <GamePlay question={gameState.currentQuestion} roundNumber={gameState.currentIdx + 1} totalRounds={gameState.questions.length} timePerQ={gameSettings?.timePerQ || 30} onReveal={handleReveal} onExit={() => setShowExitConfirm(true)} players={gameState.players} teams={gameState.teams} mode={gameSettings?.mode || 'individual'} />
       )}
       {screen === 'reveal' && gameState.currentQuestion && (
-        <RevealScreen question={gameState.currentQuestion} roundNumber={gameState.currentIdx + 1} totalRounds={gameState.questions.length} scores={{ players: gameState.players, teams: gameState.teams, mode: gameSettings?.mode || 'individual' }} onNext={handleNext} />
+        <RevealScreen question={gameState.currentQuestion} roundNumber={gameState.currentIdx + 1} totalRounds={gameState.questions.length} scores={{ players: gameState.players, teams: gameState.teams, mode: gameSettings?.mode || 'individual' }} currentIdx={gameState.currentIdx} onNext={handleNext} />
       )}
       {screen === 'scoreboard' && (
         <Scoreboard scores={{ players: gameState.players, teams: gameState.teams, mode: gameSettings?.mode || 'individual' }} rounds={scorecardRounds} timePerQ={gameSettings?.timePerQ || 30} onPlayAgain={handlePlayAgain} onNewSetup={handleNewSetup} onHome={() => setScreen('home')} isDark={isDark} onToggleTheme={toggleTheme} />
