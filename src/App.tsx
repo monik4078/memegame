@@ -112,9 +112,9 @@ async function sendFeedbackToTelegram(name: string, category: string, message: s
     const chatId = (import.meta as any).env.VITE_TELEGRAM_CHAT_ID;
 
     if (!token || !chatId || token === 'placeholder' || chatId === 'placeholder' || !token.trim() || !chatId.trim()) {
-      return { 
-        success: false, 
-        error: 'Telegram bot credentials are not configured in the .env file. Please check VITE_TELEGRAM_BOT_TOKEN and VITE_TELEGRAM_CHAT_ID.' 
+      return {
+        success: false,
+        error: 'Telegram bot credentials are not configured in the .env file. Please check VITE_TELEGRAM_BOT_TOKEN and VITE_TELEGRAM_CHAT_ID.'
       };
     }
 
@@ -316,9 +316,9 @@ const ConfirmModal: React.FC<{
           </button>
         </div>
       </div>
-</div>
-   );
- };
+    </div>
+  );
+};
 
 // ==================== ALERT MODAL ====================
 const AlertModal: React.FC<{
@@ -450,7 +450,7 @@ const TypewriterText: React.FC<{ words: string[]; interval: number }> = ({ words
   useEffect(() => {
     const timer = setTimeout(() => {
       const currentWord = words[currentIndex];
-      
+
       if (isDeleting) {
         setDisplayedText(currentWord.substring(0, displayedText.length - 1));
         if (displayedText.length === 0) {
@@ -750,7 +750,7 @@ const AdminScreen: React.FC<{
       const uploadToStorage = async (file: File, prefix: string) => {
         const fileExt = file.name.split('.').pop();
         const fileName = `${prefix}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${fileExt}`;
-        
+
         const { data, error } = await supabase.storage
           .from('game-media')
           .upload(fileName, file, { cacheControl: '3600' });
@@ -821,13 +821,13 @@ const AdminScreen: React.FC<{
           .from('game_content')
           .update(dbPayload)
           .eq('id', editId);
-        
+
         if (error) throw error;
       } else {
         const { error } = await supabase
           .from('game_content')
           .insert([dbPayload]);
-        
+
         if (error) throw error;
       }
 
@@ -1922,7 +1922,7 @@ const GamePlay: React.FC<{
     } else if (!showTurnSplash) {
       audioRef.current.play()
         .then(() => setAudioPlaying(true))
-        .catch(() => {});
+        .catch(() => { });
     }
   }, [isPaused, hasAnswered, showTurnSplash]);
 
@@ -1979,25 +1979,25 @@ const GamePlay: React.FC<{
           <div className="w-24 h-24 rounded-full mx-auto mb-6 flex items-center justify-center bg-white/10 text-5xl shadow-lg border border-white/20 animate-bounce">
             {emoji}
           </div>
-          
+
           <p className="text-sm font-semibold uppercase tracking-wider text-theme-muted mb-2">
             {isTeam ? 'Team Turn' : 'Player Turn'}
           </p>
-          
+
           <h1 className="text-4xl sm:text-5xl font-black mb-6 text-theme-main">
             {turnHolder.name}
           </h1>
-          
+
           <p className="text-theme-muted mb-8 max-w-sm mx-auto text-sm">
             It's your turn to answer this question. Ready to show what you've got?
           </p>
-          
+
           <button
             className="w-full py-4 rounded-xl text-lg font-bold text-white flex items-center justify-center gap-3 transition-all active:scale-[0.98] cursor-pointer animate-pulse"
-            style={{ 
+            style={{
               background: `linear-gradient(135deg, ${borderCol}, #ec4899)`,
               boxShadow: `0 8px 25px ${borderCol}40`
-            }} 
+            }}
             onClick={() => setShowTurnSplash(false)}>
             ▶️ Reveal Question
           </button>
@@ -2118,7 +2118,7 @@ const GamePlay: React.FC<{
                       </>
                     )}
                   </div>
-                  
+
                   <div className="text-center">
                     <p className="font-bold text-sm text-cyan-400 uppercase tracking-widest">
                       {audioPlaying ? 'Playing Audio Hint' : 'Get Ready to Listen...'}
@@ -2143,9 +2143,9 @@ const GamePlay: React.FC<{
 
                   {question.audioHint && (
                     <div className="mt-2 w-full max-w-md border-t border-white/5 pt-4 text-center">
-                      <button 
-                        type="button" 
-                        onClick={() => setShowHint(!showHint)} 
+                      <button
+                        type="button"
+                        onClick={() => setShowHint(!showHint)}
                         className="text-xs text-white/40 hover:text-white/60 underline transition-colors"
                       >
                         {showHint ? 'Hide Text Clue' : 'Show Text Clue'}
@@ -2308,29 +2308,27 @@ const RevealScreen: React.FC<{
                   <p className="text-xs text-white/50">{scores.mode === 'team' ? 'Team Turn' : "Player's Turn"}</p>
                 </div>
               </div>
-              
+
               <div className="grid grid-cols-2 gap-4">
                 <button
                   type="button"
                   onClick={() => setWinnerId('nobody')}
-                  className={`py-4 px-6 rounded-2xl border-2 transition-all flex flex-col items-center justify-center gap-2 cursor-pointer ${
-                    winnerId === 'nobody'
-                      ? 'border-red-500 bg-red-500/20 shadow-[0_0_15px_rgba(239,68,68,0.3)]'
-                      : 'border-white/10 bg-white/5 hover:bg-white/10'
-                  }`}
+                  className={`py-4 px-6 rounded-2xl border-2 transition-all flex flex-col items-center justify-center gap-2 cursor-pointer ${winnerId === 'nobody'
+                    ? 'border-red-500 bg-red-500/20 shadow-[0_0_15px_rgba(239,68,68,0.3)]'
+                    : 'border-white/10 bg-white/5 hover:bg-white/10'
+                    }`}
                 >
                   <span className="text-3xl">❌</span>
                   <span className="font-bold text-red-400 text-sm sm:text-base">No, Incorrect</span>
                 </button>
-                
+
                 <button
                   type="button"
                   onClick={() => setWinnerId(turnHolder.id)}
-                  className={`py-4 px-6 rounded-2xl border-2 transition-all flex flex-col items-center justify-center gap-2 cursor-pointer ${
-                    winnerId === turnHolder.id
-                      ? 'border-green-500 bg-green-500/20 shadow-[0_0_15px_rgba(34,197,94,0.3)]'
-                      : 'border-white/10 bg-white/5 hover:bg-white/10'
-                  }`}
+                  className={`py-4 px-6 rounded-2xl border-2 transition-all flex flex-col items-center justify-center gap-2 cursor-pointer ${winnerId === turnHolder.id
+                    ? 'border-green-500 bg-green-500/20 shadow-[0_0_15px_rgba(34,197,94,0.3)]'
+                    : 'border-white/10 bg-white/5 hover:bg-white/10'
+                    }`}
                 >
                   <span className="text-3xl">✅</span>
                   <span className="font-bold text-green-400 text-sm sm:text-base">Yes, Correct!</span>
@@ -2500,6 +2498,7 @@ const Scoreboard: React.FC<{
   const [activeTab, setActiveTab] = useState<'match' | 'halloffame'>('match');
   const [hallOfFame, setHallOfFame] = useState<any[]>([]);
   const [hofLoading, setHofLoading] = useState(false);
+  const [hofError, setHofError] = useState<string | null>(null);
   const [confettiPieces] = useState(() =>
     Array.from({ length: 60 }, (_, i) => ({
       id: i,
@@ -2521,6 +2520,7 @@ const Scoreboard: React.FC<{
   useEffect(() => {
     if (activeTab === 'halloffame') {
       setHofLoading(true);
+      setHofError(null);
       supabase
         .from('scoreboard')
         .select('*')
@@ -2528,7 +2528,12 @@ const Scoreboard: React.FC<{
         .limit(10)
         .then(({ data, error }) => {
           setHofLoading(false);
-          if (!error && data) setHallOfFame(data);
+          if (error) {
+            console.error('[Hall of Fame] Supabase fetch error:', error.message, error.code, error.hint);
+            setHofError(`Database error: ${error.message}${error.hint ? ` — ${error.hint}` : ''}`);
+          } else {
+            setHallOfFame(data || []);
+          }
         });
     }
   }, [activeTab]);
@@ -2752,6 +2757,13 @@ const Scoreboard: React.FC<{
                   <div className="w-8 h-8 rounded-full border-2 border-purple-500 border-t-transparent animate-spin" />
                   <p className="text-white/40 text-sm">Loading legends...</p>
                 </div>
+              ) : hofError ? (
+                <div className="py-6 text-center">
+                  <div className="text-4xl mb-3">⚠️</div>
+                  <p className="text-red-400 font-semibold text-sm mb-2">Database Error</p>
+                  <p className="text-red-300/70 text-xs leading-relaxed mb-4 px-2">{hofError}</p>
+                  <p className="text-white/40 text-xs">👆 Make sure you have run the Supabase SQL setup script.</p>
+                </div>
               ) : hallOfFame.length === 0 ? (
                 <div className="text-center py-10">
                   <div className="text-5xl mb-3">🏜️</div>
@@ -2759,6 +2771,7 @@ const Scoreboard: React.FC<{
                   <p className="text-white/30 text-sm mt-1">Play a game to be the first legend.</p>
                 </div>
               ) : (
+
                 <div className="space-y-2.5">
                   {hallOfFame.map((entry, idx) => {
                     const rankColors = ['#eab308', '#94a3b8', '#f97316'];
@@ -2774,7 +2787,7 @@ const Scoreboard: React.FC<{
                           </div>
                           <div className="flex-1 min-w-0">
                             <p className="font-bold text-white truncate">{entry.winner_name}</p>
-                            <p className="text-xs text-white/40">{formatDate(entry.created_at)} · {entry.rounds} rounds · {entry.mode}</p>
+                            <p className="text-xs text-white/40"> {entry.rounds} rounds · {entry.mode}</p>
                           </div>
                           <div className="text-right shrink-0">
                             <p className="text-xl font-black" style={{ color: rankColor }}>{entry.total_score}</p>
@@ -2864,7 +2877,7 @@ const AdminLogin: React.FC<{
     <div className="min-h-screen flex items-center justify-center px-4 py-12 relative">
       <div className="max-w-md w-full rounded-2xl p-6 sm:p-8 shadow-2xl relative border border-theme-card bg-theme-card"
         style={{ backdropFilter: 'blur(10px)' }}>
-        
+
         {/* Back Button */}
         <button onClick={onBack} className="absolute top-6 left-6 w-10 h-10 rounded-xl flex items-center justify-center hover:bg-white/10 transition-colors border border-theme-card bg-theme-card">
           <span className="text-xl">⬅️</span>
@@ -2933,7 +2946,7 @@ const App: React.FC = () => {
   const [showExitApp, setShowExitApp] = useState(false);
 
   const [isDark] = useState(true);
-  const toggleTheme = () => {};
+  const toggleTheme = () => { };
 
   const [isAdmin, setIsAdmin] = useState(false);
   const [adminEmail, setAdminEmail] = useState<string | null>(null);
@@ -3017,17 +3030,28 @@ const App: React.FC = () => {
 
   // Save game results to Supabase scoreboard table
   const saveGameResults = async (players: Player[], teams: Team[], mode: GameMode, numRounds: number, totalScore: number, winnerName: string) => {
-    try {
-      await supabase.from('scoreboard').insert([{
-        mode,
-        rounds: numRounds,
-        total_score: totalScore,
-        winner_name: winnerName,
-        player_results: mode === 'individual' ? players.map(p => ({ name: p.name, score: p.score, streak: p.streak, bestStreak: p.bestStreak, correctAnswers: p.correctAnswers, totalAnswers: p.totalAnswers })) : null,
-        team_results: mode === 'team' ? teams.map(t => ({ name: t.name, score: t.score, color: t.color, emoji: t.emoji })) : null,
-      }]);
-    } catch (err) {
-      console.error('Failed to save game results to Supabase scoreboard:', err);
+    // Build insert payload
+    const payload = {
+      mode,
+      rounds: numRounds,
+      total_score: totalScore,
+      winner_name: winnerName,
+      player_results: mode === 'individual'
+        ? players.map(p => ({ name: p.name, score: p.score, streak: p.streak, bestStreak: p.bestStreak, correctAnswers: p.correctAnswers, totalAnswers: p.totalAnswers }))
+        : null,
+      team_results: mode === 'team'
+        ? teams.map(t => ({ name: t.name, score: t.score, color: t.color, emoji: t.emoji }))
+        : null,
+    };
+
+    console.log('[saveGameResults] Attempting to insert scoreboard record:', payload);
+
+    const { data, error } = await supabase.from('scoreboard').insert([payload]).select();
+
+    if (error) {
+      console.error('[saveGameResults] Supabase insert error:', error.message, error.details, error.hint, error.code);
+    } else {
+      console.log('[saveGameResults] Successfully saved scoreboard record:', data);
     }
   };
 
