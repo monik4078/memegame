@@ -46,7 +46,7 @@ const GameSetup: React.FC = () => {
     }
   };
 
-  const canStart = settings.contentTypes.length > 0 && settings.totalRounds > 0;
+  const canStart = settings.contentTypes.length > 0;
 
   return (
     <div className="min-h-screen bg-animated p-4 sm:p-6">
@@ -127,22 +127,6 @@ const GameSetup: React.FC = () => {
         <div className="game-card p-6 mb-6 animate-slideUp stagger-2">
           <h2 className="text-lg font-bold mb-4 flex items-center gap-2"><Clock className="w-5 h-5 text-neon-green" /> Settings</h2>
           <div className="space-y-4">
-            <div>
-              <label className="text-sm text-white/60 mb-2 block">
-                Number of Rounds: <span className="text-neon-purple font-bold">{settings.totalRounds}</span>
-              </label>
-              <input
-                type="range"
-                min={1}
-                max={20}
-                value={settings.totalRounds}
-                onChange={(e) => setRounds(parseInt(e.target.value))}
-                className="w-full accent-purple-500"
-              />
-              <div className="flex justify-between text-xs text-white/20 mt-1">
-                <span>1</span><span>10</span><span>20</span>
-              </div>
-            </div>
             <div>
               <label className="text-sm text-white/60 mb-2 block">
                 Time per Question: <span className="text-neon-pink font-bold">{settings.timePerQuestion}s</span>

@@ -1507,8 +1507,7 @@ const GameSetup: React.FC<{
   const [mode, setMode] = useState<GameMode>('individual');
   const [teams, setTeams] = useState<Team[]>([]);
   const [players, setPlayers] = useState<Player[]>([]);
-  const [rounds, setRounds] = useState(5);
-  const [playUnlimited, setPlayUnlimited] = useState(false);
+  const playUnlimited = true;
   const [timePerQ, setTimePerQ] = useState(30);
   const [categories, setCategories] = useState<ContentType[]>(['meme-dialogue', 'song-tune', 'movie-meme']);
   const questionTypes: QuestionType[] = ['multiple-choice', 'open-ended'];
@@ -1583,7 +1582,7 @@ const GameSetup: React.FC<{
       return;
     }
     setPlayerError('');
-    onStart({ mode, teams: currentTeams, players: currentPlayers, rounds, playUnlimited, timePerQ, categories, questionTypes });
+    onStart({ mode, teams: currentTeams, players: currentPlayers, rounds: 999, playUnlimited: true, timePerQ, categories, questionTypes });
   };
 
   return (
@@ -1649,38 +1648,6 @@ const GameSetup: React.FC<{
         <div className="rounded-2xl p-6 mb-6" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
           <h2 className="text-lg font-bold mb-4 flex items-center gap-2"><span style={{ color: '#22c55e' }}>⏰</span> Settings</h2>
           <div className="space-y-5">
-            <div>
-              <div className="flex items-center justify-between gap-3 mb-3">
-                <label className="text-sm text-white/60 block">Questions</label>
-                <button
-                  type="button"
-                  onClick={() => setPlayUnlimited(v => !v)}
-                  className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold transition-all"
-                  style={{
-                    background: playUnlimited ? 'rgba(34,197,94,0.16)' : 'rgba(255,255,255,0.06)',
-                    border: `1px solid ${playUnlimited ? 'rgba(34,197,94,0.35)' : 'rgba(255,255,255,0.12)'}`,
-                    color: playUnlimited ? '#22c55e' : 'rgba(255,255,255,0.6)',
-                  }}
-                >
-                  {playUnlimited && <span>✓</span>}
-                  Unlimited
-                </button>
-              </div>
-              <input
-                type="number"
-                min={1}
-                max={200}
-                disabled={playUnlimited}
-                value={rounds}
-                onChange={e => setRounds(Math.max(1, Math.min(200, parseInt(e.target.value, 10) || 1)))}
-                className="w-full rounded-xl px-4 py-3 text-white outline-none text-sm disabled:opacity-45"
-                style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}
-                placeholder="Enter number of questions"
-              />
-              <p className="text-xs text-white/30 mt-2">
-                {playUnlimited ? 'Game will use every matching question available.' : 'Enter the exact number of questions for this game.'}
-              </p>
-            </div>
             <div>
               <label className="text-sm text-white/60 mb-2 block">Time per Question: <span style={{ color: '#ec4899' }} className="font-bold">{timePerQ}s</span></label>
               <input type="range" min={10} max={60} step={5} value={timePerQ} onChange={e => setTimePerQ(parseInt(e.target.value))} className="w-full" style={{ accentColor: '#ec4899' }} />
@@ -1791,7 +1758,7 @@ const GameLobby: React.FC<{
             ⚡ Get Ready to Play!
           </div>
           <h1 className="text-4xl sm:text-5xl font-black mb-2">{settings.mode === 'team' ? '⚔️ Team Battle' : '🎮 Game On!'}</h1>
-          <p className="text-white/40">{settings.playUnlimited ? 'Unlimited questions' : `${settings.rounds} rounds`} • {settings.timePerQ}s per question</p>
+          <p className="text-white/40">Unlimited questions • {settings.timePerQ}s per question</p>
         </div>
 
         <div className="rounded-2xl p-6 mb-6" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
@@ -2013,7 +1980,7 @@ const GamePlay: React.FC<{
           <div className="flex items-center gap-2 flex-wrap">
             <GuessWhatLogo size={24} />
             <span className="text-xs px-2.5 py-1 rounded-full font-semibold" style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.6)' }}>
-              Round {roundNumber}/{totalRounds}
+              Question {roundNumber}/{totalRounds}
             </span>
             <span className="text-xs px-2.5 py-1 rounded-full font-semibold" style={{ background: 'rgba(168,85,247,0.15)', color: '#a855f7' }}>
               <span className="inline-flex items-center gap-1.5"><QuestionTypeIcon className="w-3.5 h-3.5" /> {typeLabel(question.type)}</span>
@@ -2262,7 +2229,8 @@ const RevealScreen: React.FC<{
   scores: { players: Player[]; teams: Team[]; mode: GameMode };
   currentIdx: number;
   onNext: (winnerId: string | 'nobody') => void;
-}> = ({ question, roundNumber, totalRounds, scores, currentIdx, onNext }) => {
+  onExit?: () => void;
+}> = ({ question, roundNumber, totalRounds, scores, currentIdx, onNext, onExit }) => {
   const [winnerId, setWinnerId] = useState<string | null>(null);
   const progress = (roundNumber / totalRounds) * 100;
   const entities = scores.mode === 'team' ? scores.teams : scores.players;
@@ -2271,8 +2239,13 @@ const RevealScreen: React.FC<{
   return (
     <div className="min-h-screen flex items-center justify-center px-4 py-6">
       <div className="max-w-xl w-full">
-        <div className="flex justify-center mb-4">
+        <div className="flex items-center justify-between mb-4">
           <GuessWhatLogo size={32} />
+          {onExit && (
+            <button onClick={onExit} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-red-400 hover:text-red-300 transition-colors cursor-pointer" style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)' }}>
+              🚪 Exit Game
+            </button>
+          )}
         </div>
         <div className="w-full h-1.5 rounded-full mb-6" style={{ background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
           <div className="h-full rounded-full" style={{ width: `${progress}%`, background: 'linear-gradient(90deg, #a855f7, #ec4899)' }} />
@@ -3275,7 +3248,7 @@ const App: React.FC = () => {
         <GamePlay question={gameState.currentQuestion} roundNumber={gameState.currentIdx + 1} totalRounds={gameState.questions.length} timePerQ={gameSettings?.timePerQ || 30} onReveal={handleReveal} onExit={() => setShowExitConfirm(true)} players={gameState.players} teams={gameState.teams} mode={gameSettings?.mode || 'individual'} />
       )}
       {screen === 'reveal' && gameState.currentQuestion && (
-        <RevealScreen question={gameState.currentQuestion} roundNumber={gameState.currentIdx + 1} totalRounds={gameState.questions.length} scores={{ players: gameState.players, teams: gameState.teams, mode: gameSettings?.mode || 'individual' }} currentIdx={gameState.currentIdx} onNext={handleNext} />
+        <RevealScreen question={gameState.currentQuestion} roundNumber={gameState.currentIdx + 1} totalRounds={gameState.questions.length} scores={{ players: gameState.players, teams: gameState.teams, mode: gameSettings?.mode || 'individual' }} currentIdx={gameState.currentIdx} onNext={handleNext} onExit={() => setShowExitConfirm(true)} />
       )}
       {screen === 'scoreboard' && (
         <Scoreboard scores={{ players: gameState.players, teams: gameState.teams, mode: gameSettings?.mode || 'individual' }} rounds={scorecardRounds} timePerQ={gameSettings?.timePerQ || 30} onPlayAgain={handlePlayAgain} onNewSetup={handleNewSetup} onHome={() => navigate('home')} isDark={isDark} onToggleTheme={toggleTheme} onFeedback={() => setShowFeedback(true)} />
