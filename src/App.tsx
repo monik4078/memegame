@@ -344,6 +344,47 @@ const AlertModal: React.FC<{
   );
 };
 
+// ==================== IMAGE WITH SPINNER ====================
+const ImageWithSpinner: React.FC<{
+  src: string;
+  alt: string;
+  className?: string;
+  style?: React.CSSProperties;
+}> = ({ src, alt, className = '', style }) => {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    setLoading(true);
+    setError(false);
+  }, [src]);
+
+  return (
+    <div className={`relative flex items-center justify-center overflow-hidden ${className}`} style={style}>
+      {loading && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/40 backdrop-blur-sm z-10 p-4 min-h-[140px]">
+          <div className="w-10 h-10 border-4 border-purple-500/20 border-t-purple-500 border-r-pink-500 rounded-full animate-spin mb-2" />
+          <span className="text-xs font-semibold text-white/70 animate-pulse">Loading image...</span>
+        </div>
+      )}
+      {error ? (
+        <div className="p-6 text-center text-xs text-white/40">
+          <span>⚠️ Image failed to load</span>
+        </div>
+      ) : (
+        <img
+          src={src}
+          alt={alt}
+          onLoad={() => setLoading(false)}
+          onError={() => { setLoading(false); setError(true); }}
+          className={`transition-opacity duration-300 ${loading ? 'opacity-0' : 'opacity-100'} ${className}`}
+          style={style}
+        />
+      )}
+    </div>
+  );
+};
+
 // ==================== LOADING SCREEN ====================
 const LoadingScreen: React.FC<{ onComplete: () => void }> = ({ onComplete }) => {
   const [progress, setProgress] = useState(0);
@@ -639,6 +680,7 @@ const AdminScreen: React.FC<{
   const [search, setSearch] = useState('');
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
+  const [showMovieSuggestions, setShowMovieSuggestions] = useState(false);
 
   const [form, setForm] = useState({
     type: 'meme-dialogue' as ContentType,
@@ -916,7 +958,7 @@ const AdminScreen: React.FC<{
 
       {item.imageUrl || item.imageData ? (
         <div className="mb-4 overflow-hidden rounded-3xl border border-white/10">
-          <img src={item.imageUrl || item.imageData} alt="Content preview" className="h-44 w-full object-cover" />
+          <ImageWithSpinner src={item.imageUrl || item.imageData!} alt="Content preview" className="h-44 w-full object-cover" />
         </div>
       ) : null}
       <h3 className="text-sm font-semibold text-white/90 mb-3 break-words">{item.question}</h3>
@@ -1029,7 +1071,7 @@ const AdminScreen: React.FC<{
       />
       <AlertModal open={alertInfo.open} title={alertInfo.title} message={alertInfo.message} onOk={() => setAlertInfo({ open: false, title: '', message: '' })} />
       <div className="max-w-4xl mx-auto">
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
           <div className="flex items-center gap-3">
             <button onClick={onBack} className="w-10 h-10 rounded-xl flex items-center justify-center border border-theme-card bg-theme-card" style={{ backdropFilter: 'blur(10px)' }}>
               <ArrowLeft className="w-5 h-5" />
@@ -1042,7 +1084,7 @@ const AdminScreen: React.FC<{
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
             <button
               onClick={onLogout}
               className="p-3 rounded-xl flex items-center justify-center hover:scale-105 transition-all shadow-md cursor-pointer border border-red-500/20 hover:bg-red-500/10 text-red-400"
@@ -1051,7 +1093,7 @@ const AdminScreen: React.FC<{
               <LogOut className="w-5 h-5" />
             </button>
             <button
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-white border-0 cursor-pointer transition-all hover:opacity-90"
+              className="flex items-center gap-2 px-4 sm:px-5 py-2.5 rounded-xl font-semibold text-white border-0 cursor-pointer transition-all hover:opacity-90 text-sm"
               style={{ background: 'linear-gradient(135deg, #a855f7, #ec4899)' }}
               onClick={() => { setShowForm(true); setEditId(null); setForm({ type: 'meme-dialogue', questionType: 'open-ended', question: '', answer: '', options: ['', '', '', ''], imageData: '', videoData: '', audioData: '', audioHint: '', difficulty: 'medium', points: 20, movie: selectedFolder && selectedFolder !== '__independent__' ? selectedFolder : '' }); setIsCreatingFolder(!selectedFolder || selectedFolder === '__independent__'); setImageFile(null); setVideoFile(null); setAudioFile(null); }}
             >
@@ -1162,49 +1204,41 @@ const AdminScreen: React.FC<{
                 </div>
 
                 <div>
-                  <label className="text-sm text-white/60 mb-1 block">Folder</label>
-                  <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2">
-                    <select
+                  <label className="text-sm text-white/60 mb-1 block">Movie / Folder Name</label>
+                  <div className="relative">
+                    <input
                       className="w-full rounded-xl px-4 py-3 text-white outline-none text-sm"
                       style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}
-                      value={isCreatingFolder ? '__new__' : (form.movie || '')}
-                      onChange={e => {
-                        if (e.target.value === '__new__') {
-                          setIsCreatingFolder(true);
-                          setForm({ ...form, movie: '' });
-                          return;
-                        }
-                        setIsCreatingFolder(false);
-                        setForm({ ...form, movie: e.target.value });
-                      }}
-                    >
-                      <option value="" style={{ background: '#1a1a2e' }}>Independent Content</option>
-                      {availableFolders.map(folder => (
-                        <option key={folder} value={folder} style={{ background: '#1a1a2e' }}>{folder}</option>
-                      ))}
-                      <option value="__new__" style={{ background: '#1a1a2e' }}>Create new folder...</option>
-                    </select>
-                    <button
-                      type="button"
-                      className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition"
-                      style={{ background: isCreatingFolder ? 'rgba(168,85,247,0.18)' : 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: isCreatingFolder ? '#c084fc' : 'rgba(255,255,255,0.65)' }}
-                      onClick={() => {
-                        setIsCreatingFolder(true);
-                        setForm({ ...form, movie: '' });
-                      }}
-                    >
-                      <Folder className="w-4 h-4" /> New
-                    </button>
-                  </div>
-                  {isCreatingFolder && (
-                    <input
-                      className="mt-2 w-full rounded-xl px-4 py-3 text-white outline-none text-sm"
-                      style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}
-                      placeholder="Type folder name, e.g. Shrek, Iron Man, Random Content"
+                      placeholder="Type movie name (e.g. Shrek, Iron Man, or leave blank for independent)"
                       value={form.movie || ''}
-                      onChange={e => setForm({ ...form, movie: e.target.value })}
+                      onChange={e => {
+                        setForm({ ...form, movie: e.target.value });
+                        setShowMovieSuggestions(true);
+                      }}
+                      onFocus={() => setShowMovieSuggestions(true)}
                     />
-                  )}
+                    {showMovieSuggestions && (form.movie || '').trim() !== '' && availableFolders.filter(f => f.toLowerCase().includes((form.movie || '').trim().toLowerCase())).length > 0 && (
+                      <div className="absolute left-0 right-0 top-full mt-1.5 z-50 rounded-2xl border border-purple-500/30 bg-slate-900/95 p-2 shadow-2xl backdrop-blur-xl max-h-48 overflow-y-auto">
+                        <p className="px-3 py-1.5 text-[10px] uppercase font-bold text-white/40 tracking-wider">Existing Folders</p>
+                        {availableFolders
+                          .filter(f => f.toLowerCase().includes((form.movie || '').trim().toLowerCase()))
+                          .map(folder => (
+                            <button
+                              key={folder}
+                              type="button"
+                              className="w-full text-left px-3 py-2 text-xs text-white/80 hover:bg-purple-500/20 hover:text-white rounded-xl transition-colors flex items-center gap-2 cursor-pointer"
+                              onClick={() => {
+                                setForm({ ...form, movie: folder });
+                                setShowMovieSuggestions(false);
+                              }}
+                            >
+                              <Folder className="w-3.5 h-3.5 text-cyan-400" />
+                              <span>{folder}</span>
+                            </button>
+                          ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {form.questionType === 'multiple-choice' && (
@@ -1374,7 +1408,7 @@ const AdminScreen: React.FC<{
               style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}
               placeholder="Search questions, answers, or folders..." value={search} onChange={e => { setSearch(e.target.value); setSelectedFolder(null); }} />
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2 overflow-x-auto pb-1">
             {[
               { key: 'all', label: 'All' },
               { key: 'meme-dialogue', label: 'Memes' },
@@ -1644,18 +1678,6 @@ const GameSetup: React.FC<{
           </div>
         </div>
 
-
-        <div className="rounded-2xl p-6 mb-6" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
-          <h2 className="text-lg font-bold mb-4 flex items-center gap-2"><span style={{ color: '#22c55e' }}>⏰</span> Settings</h2>
-          <div className="space-y-5">
-            <div>
-              <label className="text-sm text-white/60 mb-2 block">Time per Question: <span style={{ color: '#ec4899' }} className="font-bold">{timePerQ}s</span></label>
-              <input type="range" min={10} max={60} step={5} value={timePerQ} onChange={e => setTimePerQ(parseInt(e.target.value))} className="w-full" style={{ accentColor: '#ec4899' }} />
-              <div className="flex justify-between text-xs text-white/20 mt-1"><span>10s</span><span>30s</span><span>60s</span></div>
-            </div>
-          </div>
-        </div>
-
         {mode === 'team' ? (
           <div className="rounded-2xl p-6 mb-6" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
             <h2 className="text-lg font-bold mb-4 flex items-center gap-2"><span style={{ color: '#ec4899' }}>👥</span> Teams</h2>
@@ -1758,7 +1780,7 @@ const GameLobby: React.FC<{
             ⚡ Get Ready to Play!
           </div>
           <h1 className="text-4xl sm:text-5xl font-black mb-2">{settings.mode === 'team' ? '⚔️ Team Battle' : '🎮 Game On!'}</h1>
-          <p className="text-white/40">Unlimited questions • {settings.timePerQ}s per question</p>
+          <p className="text-white/40">Unlimited questions • Untimed</p>
         </div>
 
         <div className="rounded-2xl p-6 mb-6" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
@@ -1807,45 +1829,26 @@ const GamePlay: React.FC<{
   question: GameContent & { shuffledOptions?: string[] };
   roundNumber: number;
   totalRounds: number;
-  timePerQ: number;
-  onReveal: () => void;
+  onNext: (winnerId: string | 'nobody') => void;
   onExit: () => void;
   players: Player[];
   teams: Team[];
   mode: GameMode;
-}> = ({ question, roundNumber, totalRounds, timePerQ, onReveal, onExit, players, teams, mode }) => {
-  const [timeLeft, setTimeLeft] = useState(timePerQ);
-  const [hasAnswered, setHasAnswered] = useState(false);
+}> = ({ question, roundNumber, totalRounds, onNext, onExit, players, teams, mode }) => {
+  const [isRevealed, setIsRevealed] = useState(false);
+  const [selectedWinnerId, setSelectedWinnerId] = useState<string | null>(null);
   const [showHint, setShowHint] = useState(false);
-  const [isPaused, setIsPaused] = useState(false);
-  const [showTurnSplash, setShowTurnSplash] = useState(true);
   const [audioPlaying, setAudioPlaying] = useState(false);
   const [waveHeights, setWaveHeights] = useState<number[]>(Array(15).fill(4));
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
-    setHasAnswered(false);
-    setTimeLeft(timePerQ);
+    setIsRevealed(false);
+    setSelectedWinnerId(null);
     setShowHint(false);
-    setIsPaused(false);
-    setShowTurnSplash(true);
-  }, [question.id, timePerQ]);
+  }, [question.id]);
 
-  useEffect(() => {
-    if (showTurnSplash) return;
-    if (isPaused) return;
-    if (hasAnswered) return;
-    if (timeLeft <= 0) {
-      setHasAnswered(true);
-      onReveal();
-      return;
-    }
-    timerRef.current = setInterval(() => setTimeLeft(t => t - 1), 1000);
-    return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [timeLeft, hasAnswered, isPaused, showTurnSplash, onReveal]);
-
-  // Audio Playback Autoplay Logic (1-second delay after Turn Splash is dismissed)
+  // Audio Playback Autoplay Logic
   useEffect(() => {
     if (audioRef.current) {
       audioRef.current.pause();
@@ -1853,19 +1856,19 @@ const GamePlay: React.FC<{
     }
     setAudioPlaying(false);
 
-    if (question.audioData && !showTurnSplash) {
+    if (question.audioData) {
       const audio = new Audio(question.audioData);
       audioRef.current = audio;
 
       const playTimeout = setTimeout(() => {
-        if (audioRef.current && !isPaused && !hasAnswered) {
+        if (audioRef.current) {
           audio.play()
             .then(() => setAudioPlaying(true))
             .catch(err => {
               console.error("Audio playback failed or was blocked:", err);
             });
         }
-      }, 1000);
+      }, 600);
 
       audio.onended = () => {
         setAudioPlaying(false);
@@ -1877,21 +1880,7 @@ const GamePlay: React.FC<{
         audioRef.current = null;
       };
     }
-  }, [question.id, showTurnSplash]);
-
-  // Pause / Resume and Reveal handling for audio
-  useEffect(() => {
-    if (!audioRef.current) return;
-
-    if (isPaused || hasAnswered) {
-      audioRef.current.pause();
-      setAudioPlaying(false);
-    } else if (!showTurnSplash) {
-      audioRef.current.play()
-        .then(() => setAudioPlaying(true))
-        .catch(() => { });
-    }
-  }, [isPaused, hasAnswered, showTurnSplash]);
+  }, [question.id]);
 
   // Audio Wave Visualizer animation interval
   useEffect(() => {
@@ -1908,70 +1897,14 @@ const GamePlay: React.FC<{
   }, [audioPlaying]);
 
   const progress = ((roundNumber - 1) / totalRounds) * 100;
-  const timerPct = (timeLeft / timePerQ) * 100;
-  const timerColor = timeLeft > 10 ? '#a855f7' : timeLeft > 5 ? '#eab308' : '#ef4444';
-  const circumference = 2 * Math.PI * 26;
-  const dashOffset = circumference * (1 - timerPct / 100);
-
   const typeLabel = (t: string) => t === 'meme-dialogue' ? 'Meme Dialogue' : t === 'song-tune' ? 'Song Tune' : 'Movie Meme';
   const isMC = question.questionType === 'multiple-choice';
   const QuestionTypeIcon = contentIconMap[question.type];
-
-  const handleRevealClick = () => {
-    if (hasAnswered) return;
-    setHasAnswered(true);
-    onReveal();
-  };
-
-  const handleMCOptionClick = () => {
-    if (hasAnswered) return;
-    setHasAnswered(true);
-    setTimeout(() => onReveal(), 400); // slight delay just for visual feedback
-  };
-
   const entities = mode === 'team' ? teams : players;
-  const turnHolder = entities.length > 0 ? entities[(roundNumber - 1) % entities.length] : null;
 
-  // Turn Splash Screen
-  if (showTurnSplash && turnHolder) {
-    const isTeam = mode === 'team';
-    const borderCol = isTeam ? (turnHolder as Team).color : '#3b82f6';
-    const bgCol = isTeam ? `${(turnHolder as Team).color}10` : 'rgba(59,130,246,0.1)';
-    const emoji = isTeam ? (turnHolder as Team).emoji : '👤';
-
-    return (
-      <div className="min-h-screen flex items-center justify-center px-4 relative">
-        <div className="max-w-xl w-full text-center p-8 rounded-3xl border animate-scaleIn bg-theme-card"
-          style={{ borderColor: borderCol, background: bgCol, backdropFilter: 'blur(15px)' }}>
-          <div className="w-24 h-24 rounded-full mx-auto mb-6 flex items-center justify-center bg-white/10 text-5xl shadow-lg border border-white/20 animate-bounce">
-            {emoji}
-          </div>
-
-          <p className="text-sm font-semibold uppercase tracking-wider text-theme-muted mb-2">
-            {isTeam ? 'Team Turn' : 'Player Turn'}
-          </p>
-
-          <h1 className="text-4xl sm:text-5xl font-black mb-6 text-theme-main">
-            {turnHolder.name}
-          </h1>
-
-          <p className="text-theme-muted mb-8 max-w-sm mx-auto text-sm">
-            It's your turn to answer this question. Ready to show what you've got?
-          </p>
-
-          <button
-            className="w-full py-4 rounded-xl text-lg font-bold text-white flex items-center justify-center gap-3 transition-all active:scale-[0.98] cursor-pointer animate-pulse"
-            style={{
-              background: `linear-gradient(135deg, ${borderCol}, #ec4899)`,
-              boxShadow: `0 8px 25px ${borderCol}40`
-            }}
-            onClick={() => setShowTurnSplash(false)}>
-            ▶️ Reveal Question
-          </button>
-        </div>
-      </div>
-    );
-  }
+  const handleRevealAnswer = () => {
+    setIsRevealed(true);
+  };
 
   return (
     <div className="min-h-screen flex flex-col px-4 py-4">
@@ -1993,10 +1926,7 @@ const GamePlay: React.FC<{
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={() => setIsPaused(true)} className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold transition-colors" style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.65)' }}>
-              ⏸️ Pause
-            </button>
-            <button onClick={onExit} className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold text-red-400 hover:text-red-300 transition-colors" style={{ background: 'rgba(239,68,68,0.1)' }}>
+            <button onClick={onExit} className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold text-red-400 hover:text-red-300 transition-colors" style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)' }}>
               🚪 Exit Game
             </button>
           </div>
@@ -2009,61 +1939,26 @@ const GamePlay: React.FC<{
               <span>{('emoji' in e) ? (e as Team).emoji : '👤'}</span>
               <span className="text-white/80 max-w-[80px] truncate">{e.name}</span>
               <span className="text-purple-400 font-bold">{e.score} pts</span>
-              {(!('emoji' in e)) && (e as Player).streak > 0 && (
-                <span className="text-[10px] text-orange-400 font-bold animate-pulse">🔥 {(e as Player).streak}</span>
-              )}
             </div>
           ))}
         </div>
 
-        {isPaused && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center px-4" style={{ background: 'rgba(0,0,0,0.78)', backdropFilter: 'blur(12px)' }}>
-            <div className="w-full max-w-sm rounded-2xl p-6 text-center shadow-2xl" style={{ background: 'rgba(18,18,42,0.96)', border: '1px solid rgba(255,255,255,0.12)' }}>
-              <div className="w-14 h-14 rounded-2xl mx-auto mb-4 flex items-center justify-center" style={{ background: 'rgba(168,85,247,0.18)' }}>
-                <span className="text-3xl">⏸️</span>
-              </div>
-              <h3 className="text-xl font-bold mb-2">Game Paused</h3>
-              <p className="text-sm text-white/50 mb-6">Timer is stopped. Resume when everyone is ready.</p>
-              <div className="grid grid-cols-2 gap-3">
-                <button className="py-3 rounded-xl font-semibold text-red-300" style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.22)' }} onClick={onExit}>
-                  Exit
-                </button>
-                <button className="py-3 rounded-xl font-bold text-white flex items-center justify-center gap-2" style={{ background: 'linear-gradient(135deg, #a855f7, #ec4899)' }} onClick={() => setIsPaused(false)}>
-                  ▶️ Resume
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          {/* Main gameplay card & controls */}
-          <div className="lg:col-span-3">
-            <div className="w-full h-1.5 rounded-full mb-4" style={{ background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          {/* Left Column: Question & Media */}
+          <div className="lg:col-span-7 space-y-4">
+            <div className="w-full h-1.5 rounded-full mb-2" style={{ background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
               <div className="h-full rounded-full transition-all duration-500" style={{ width: `${progress}%`, background: 'linear-gradient(90deg, #a855f7, #ec4899)' }} />
             </div>
 
-            <div className="flex items-center justify-center mb-4">
-              <div className="relative w-16 h-16">
-                <svg className="w-full h-full" viewBox="0 0 60 60">
-                  <circle cx="30" cy="30" r="26" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="3" />
-                  <circle cx="30" cy="30" r="26" fill="none" stroke={timerColor} strokeWidth="3" strokeDasharray={circumference} strokeDashoffset={dashOffset} strokeLinecap="round" style={{ transform: 'rotate(-90deg)', transformOrigin: 'center', transition: 'stroke-dashoffset 1s linear' }} />
-                </svg>
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <span className="text-xl font-bold" style={{ color: timerColor }}>{timeLeft}</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-2xl p-6 mb-4 border border-theme-card bg-theme-card" style={{ backdropFilter: 'blur(10px)' }}>
+            <div className="rounded-2xl p-6 border border-theme-card bg-theme-card" style={{ backdropFilter: 'blur(10px)' }}>
               {question.imageData && (
                 <div className="mb-4 rounded-xl overflow-hidden flex items-center justify-center bg-black/10 border border-theme-card">
-                  <img src={question.imageData} alt="question" className="max-w-full max-h-[55vh] object-contain rounded-xl shadow-md" />
+                  <ImageWithSpinner src={question.imageData} alt="question" className="max-w-full max-h-[45vh] object-contain rounded-xl shadow-md" />
                 </div>
               )}
               {question.videoData && (
                 <div className="mb-4 rounded-xl overflow-hidden bg-black/10 border border-theme-card">
-                  <video src={question.videoData} controls className="w-full max-h-[55vh] object-contain rounded-xl shadow-md" />
+                  <video src={question.videoData} controls className="w-full max-h-[45vh] object-contain rounded-xl shadow-md" />
                 </div>
               )}
               {question.audioData && (
@@ -2078,20 +1973,11 @@ const GamePlay: React.FC<{
                     ) : (
                       <span className="text-2xl">🔇</span>
                     )}
-                    {audioPlaying && (
-                      <>
-                        <div className="absolute inset-0 rounded-full bg-cyan-500/30 animate-ping" />
-                        <div className="absolute -inset-2 rounded-full border border-cyan-500/20 animate-pulse" />
-                      </>
-                    )}
                   </div>
 
                   <div className="text-center">
                     <p className="font-bold text-sm text-cyan-400 uppercase tracking-widest">
-                      {audioPlaying ? 'Playing Audio Hint' : 'Get Ready to Listen...'}
-                    </p>
-                    <p className="text-xs text-white/50 mt-1">
-                      {audioPlaying ? 'Listen carefully to the music' : 'Audio will start automatically'}
+                      {audioPlaying ? 'Playing Audio' : 'Audio Player'}
                     </p>
                   </div>
 
@@ -2139,48 +2025,115 @@ const GamePlay: React.FC<{
               </div>
             </div>
 
-            {isMC ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
-                {(question.shuffledOptions || question.options || []).map((opt: string, idx: number) => (
-                  <button key={idx} onClick={handleMCOptionClick} disabled={hasAnswered}
-                    className="p-4 rounded-xl text-left transition-all duration-300 hover:bg-white/10"
-                    style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', cursor: hasAnswered ? 'default' : 'pointer' }}>
-                    <div className="flex items-center gap-3">
-                      <span className="w-9 h-9 rounded-lg flex items-center justify-center text-sm font-bold flex-shrink-0" style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.5)' }}>
-                        {String.fromCharCode(65 + idx)}
-                      </span>
-                      <span className="text-sm font-medium text-white/80">{opt}</span>
+            {isMC && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {(question.shuffledOptions || question.options || []).map((opt: string, idx: number) => {
+                  const isCorrectOpt = isRevealed && opt === question.answer;
+                  return (
+                    <div key={idx}
+                      className={`p-4 rounded-xl text-left transition-all duration-300 ${isCorrectOpt
+                        ? 'bg-green-500/20 border-2 border-green-400 shadow-[0_0_15px_rgba(34,197,94,0.3)]'
+                        : 'bg-white/5 border border-white/10'
+                        }`}>
+                      <div className="flex items-center gap-3">
+                        <span className={`w-9 h-9 rounded-lg flex items-center justify-center text-sm font-bold flex-shrink-0 ${isCorrectOpt ? 'bg-green-500/30 text-green-300 font-extrabold' : 'bg-white/10 text-white/50'
+                          }`}>
+                          {isCorrectOpt ? '✓' : String.fromCharCode(65 + idx)}
+                        </span>
+                        <span className={`text-sm font-medium ${isCorrectOpt ? 'text-green-300 font-bold' : 'text-white/80'}`}>{opt}</span>
+                      </div>
                     </div>
-                  </button>
-                ))}
+                  );
+                })}
               </div>
-            ) : (
-              <div className="mb-4 text-center">
-                <div className="py-6 px-4 rounded-xl mb-4" style={{ background: 'rgba(255,255,255,0.02)', border: '1px dashed rgba(255,255,255,0.1)' }}>
-                  <p className="text-white/40 mb-1 font-semibold uppercase tracking-wider text-xs">Open Ended Question</p>
-                  <p className="text-sm text-white/60">Read the question aloud. When they answer, reveal to verify and award points.</p>
-                </div>
-                <button onClick={handleRevealClick} disabled={hasAnswered} className="w-full py-5 rounded-xl text-xl font-bold text-white transition-all active:scale-[0.98]"
-                  style={{ background: 'linear-gradient(135deg, #a855f7, #ec4899)', boxShadow: '0 8px 25px rgba(168,85,247,0.3)' }}>
-                  👁️ Reveal Answer
-                </button>
-              </div>
-            )}
-
-            {isMC && !hasAnswered && (
-              <button className="w-full py-3 rounded-xl font-semibold text-white/60 flex items-center justify-center gap-2 transition-all"
-                style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }}
-                onClick={handleRevealClick}>
-                👁️ Skip & Reveal
-              </button>
             )}
           </div>
 
-          {/* Desktop Live Score Tracer Sidebar */}
-          <div className="hidden lg:block lg:col-span-1">
-            <div className="bg-theme-card border border-theme-card rounded-2xl p-4 sticky top-4" style={{ backdropFilter: 'blur(10px)' }}>
-              <div className="flex items-center justify-between mb-4 pb-2 border-b border-white/10">
-                <h3 className="font-bold text-sm text-theme-main flex items-center gap-2">
+          {/* Right Column: Answer Reveal & Host Player Selection */}
+          <div className="lg:col-span-5 space-y-4">
+            {!isRevealed ? (
+              <div className="rounded-2xl p-8 text-center border border-white/10 bg-white/5 backdrop-blur-md flex flex-col items-center justify-center min-h-[200px]">
+                <div className="text-5xl mb-4 animate-bounce">🔒</div>
+                <button
+                  type="button"
+                  onClick={handleRevealAnswer}
+                  className="w-full py-4 rounded-xl text-lg font-bold text-white flex items-center justify-center gap-2 transition-all active:scale-[0.98] cursor-pointer"
+                  style={{ background: 'linear-gradient(135deg, #a855f7, #ec4899)', boxShadow: '0 8px 25px rgba(168,85,247,0.35)' }}>
+                  👁️ Reveal Answer
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-4 animate-fadeIn">
+                <div className="rounded-2xl p-6 text-center border-2 border-green-500/40 bg-green-500/10 shadow-[0_0_30px_rgba(34,197,94,0.15)]">
+                  <div className="text-3xl mb-1">🎯</div>
+                  <h3 className="text-xs font-bold uppercase tracking-widest text-green-400 mb-1">The Correct Answer Is</h3>
+                  <p className="text-2xl font-black text-white mb-1 break-words">{question.answer}</p>
+                  <p className="text-xs text-yellow-400 font-semibold">⭐ Worth {question.points} Points ⭐</p>
+                </div>
+
+                {/* Host Player/Team Selection */}
+                <div className="rounded-2xl p-5 border border-white/10 bg-white/5 backdrop-blur-md">
+                  <h3 className="text-sm font-bold text-center mb-1">Who Answered Correctly?</h3>
+                  <p className="text-xs text-white/50 text-center mb-3">Select winner or "Nobody"</p>
+
+                  <div className="grid grid-cols-2 gap-2.5 mb-4">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedWinnerId('nobody')}
+                      className={`p-3 rounded-xl border-2 transition-all flex items-center justify-center gap-2 cursor-pointer ${selectedWinnerId === 'nobody'
+                        ? 'border-red-500 bg-red-500/20 text-red-300 shadow-[0_0_15px_rgba(239,68,68,0.3)] font-bold'
+                        : 'border-white/10 bg-white/5 text-white/70 hover:bg-white/10'
+                        }`}
+                    >
+                      <span className="text-lg">❌</span>
+                      <span className="text-xs font-semibold">Nobody</span>
+                    </button>
+
+                    {entities.map(e => {
+                      const isTeam = mode === 'team';
+                      const isSelected = selectedWinnerId === e.id;
+                      const emoji = isTeam ? (e as Team).emoji : '👤';
+                      return (
+                        <button
+                          key={e.id}
+                          type="button"
+                          onClick={() => setSelectedWinnerId(e.id)}
+                          className={`p-3 rounded-xl border-2 transition-all flex items-center gap-2 cursor-pointer ${isSelected
+                            ? 'border-green-500 bg-green-500/20 text-white shadow-[0_0_15px_rgba(34,197,94,0.3)] font-bold'
+                            : 'border-white/10 bg-white/5 text-white/80 hover:bg-white/10'
+                            }`}
+                        >
+                          <span className="text-lg flex-shrink-0">{emoji}</span>
+                          <span className="text-xs font-medium truncate">{e.name}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <button
+                    disabled={!selectedWinnerId}
+                    className="w-full py-3.5 rounded-xl text-base font-bold text-white flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
+                    style={{
+                      background: 'linear-gradient(135deg, #a855f7, #ec4899)',
+                      opacity: selectedWinnerId ? 1 : 0.4,
+                      cursor: selectedWinnerId ? 'pointer' : 'not-allowed',
+                      boxShadow: selectedWinnerId ? '0 8px 25px rgba(168,85,247,0.3)' : 'none'
+                    }}
+                    onClick={() => {
+                      if (selectedWinnerId) {
+                        onNext(selectedWinnerId);
+                      }
+                    }}>
+                    {roundNumber < totalRounds ? 'Next Question ➡️' : 'See Final Results 🏆'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Live Scores Sidebar on Right Column */}
+            <div className="bg-theme-card border border-theme-card rounded-2xl p-4" style={{ backdropFilter: 'blur(10px)' }}>
+              <div className="flex items-center justify-between mb-3 pb-2 border-b border-white/10">
+                <h3 className="font-bold text-xs text-theme-main flex items-center gap-2">
                   <span className="text-yellow-400">🏆</span>
                   <span>Live Scores</span>
                 </h3>
@@ -2188,28 +2141,18 @@ const GamePlay: React.FC<{
                   {mode === 'team' ? 'Teams' : 'Players'}
                 </span>
               </div>
-              <div className="space-y-2.5 max-h-[65vh] overflow-y-auto pr-1">
+              <div className="space-y-2 max-h-[30vh] overflow-y-auto pr-1">
                 {entities.map(e => (
-                  <div key={e.id} className="flex items-center justify-between p-2.5 rounded-xl bg-white/5 border border-white/5 hover:border-white/10 transition-all">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <span className="text-lg flex-shrink-0">
+                  <div key={e.id} className="flex items-center justify-between p-2 rounded-xl bg-white/5 border border-white/5">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-base flex-shrink-0">
                         {('emoji' in e) ? (e as Team).emoji : '👤'}
                       </span>
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold truncate text-white/90">{e.name}</p>
-                        {(!('emoji' in e)) && (e as Player).streak > 0 && (
-                          <p className="text-[10px] text-orange-400 font-bold flex items-center gap-0.5 animate-pulse mt-0.5">
-                            🔥 {(e as Player).streak} Streak
-                          </p>
-                        )}
-                      </div>
+                      <p className="text-xs font-semibold truncate text-white/90">{e.name}</p>
                     </div>
-                    <div className="text-right flex-shrink-0 pl-2">
-                      <span className="text-base font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400">
-                        {e.score}
-                      </span>
-                      <span className="text-[10px] text-white/40 block">pts</span>
-                    </div>
+                    <span className="text-sm font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400">
+                      {e.score} pts
+                    </span>
                   </div>
                 ))}
               </div>
@@ -2217,115 +2160,7 @@ const GamePlay: React.FC<{
           </div>
         </div>
       </div>
-    </div>
-  );
-};
 
-// ==================== REVEAL SCREEN ====================
-const RevealScreen: React.FC<{
-  question: GameContent;
-  roundNumber: number;
-  totalRounds: number;
-  scores: { players: Player[]; teams: Team[]; mode: GameMode };
-  currentIdx: number;
-  onNext: (winnerId: string | 'nobody') => void;
-  onExit?: () => void;
-}> = ({ question, roundNumber, totalRounds, scores, currentIdx, onNext, onExit }) => {
-  const [winnerId, setWinnerId] = useState<string | null>(null);
-  const progress = (roundNumber / totalRounds) * 100;
-  const entities = scores.mode === 'team' ? scores.teams : scores.players;
-  const turnHolder = entities.length > 0 ? entities[currentIdx % entities.length] : null;
-
-  return (
-    <div className="min-h-screen flex items-center justify-center px-4 py-6">
-      <div className="max-w-xl w-full">
-        <div className="flex items-center justify-between mb-4">
-          <GuessWhatLogo size={32} />
-          {onExit && (
-            <button onClick={onExit} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-red-400 hover:text-red-300 transition-colors cursor-pointer" style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)' }}>
-              🚪 Exit Game
-            </button>
-          )}
-        </div>
-        <div className="w-full h-1.5 rounded-full mb-6" style={{ background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
-          <div className="h-full rounded-full" style={{ width: `${progress}%`, background: 'linear-gradient(90deg, #a855f7, #ec4899)' }} />
-        </div>
-
-        <div className="rounded-2xl p-6 sm:p-8 text-center mb-6" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
-          <div className="text-5xl mb-4">🎯</div>
-          <h2 className="text-xl font-bold mb-3 text-white/60 uppercase tracking-widest">
-            The Answer Is
-          </h2>
-
-          <div className="p-6 rounded-xl mb-4" style={{ background: 'rgba(34,197,94,0.15)', border: '2px solid rgba(34,197,94,0.4)' }}>
-            <p className="text-2xl sm:text-3xl font-black text-green-400">{question.answer}</p>
-          </div>
-
-          <div className="flex items-center justify-center gap-2">
-            <span className="text-xl">⭐</span>
-            <span className="text-xl font-bold text-yellow-400">Worth {question.points} points</span>
-            <span className="text-xl">⭐</span>
-          </div>
-        </div>
-
-        <div className="rounded-2xl p-6 mb-6 text-center" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
-          {turnHolder ? (
-            <>
-              <h3 className="text-lg font-bold mb-2">Did they answer correctly?</h3>
-              <div className="flex items-center justify-center gap-3 p-4 rounded-xl mb-6 bg-white/5 border border-white/10">
-                <span className="text-3xl">
-                  {('emoji' in turnHolder) ? (turnHolder as Team).emoji : '👤'}
-                </span>
-                <div className="text-left">
-                  <p className="font-bold text-white text-lg">{turnHolder.name}</p>
-                  <p className="text-xs text-white/50">{scores.mode === 'team' ? 'Team Turn' : "Player's Turn"}</p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <button
-                  type="button"
-                  onClick={() => setWinnerId('nobody')}
-                  className={`py-4 px-6 rounded-2xl border-2 transition-all flex flex-col items-center justify-center gap-2 cursor-pointer ${winnerId === 'nobody'
-                    ? 'border-red-500 bg-red-500/20 shadow-[0_0_15px_rgba(239,68,68,0.3)]'
-                    : 'border-white/10 bg-white/5 hover:bg-white/10'
-                    }`}
-                >
-                  <span className="text-3xl">❌</span>
-                  <span className="font-bold text-red-400 text-sm sm:text-base">No, Incorrect</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setWinnerId(turnHolder.id)}
-                  className={`py-4 px-6 rounded-2xl border-2 transition-all flex flex-col items-center justify-center gap-2 cursor-pointer ${winnerId === turnHolder.id
-                    ? 'border-green-500 bg-green-500/20 shadow-[0_0_15px_rgba(34,197,94,0.3)]'
-                    : 'border-white/10 bg-white/5 hover:bg-white/10'
-                    }`}
-                >
-                  <span className="text-3xl">✅</span>
-                  <span className="font-bold text-green-400 text-sm sm:text-base">Yes, Correct!</span>
-                </button>
-              </div>
-            </>
-          ) : (
-            <p className="text-white/40 text-sm">No turn holder found</p>
-          )}
-        </div>
-
-        <button
-          disabled={!winnerId}
-          className="w-full py-4 rounded-xl text-lg font-bold text-white flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
-          style={{
-            background: 'linear-gradient(135deg, #a855f7, #ec4899)',
-            opacity: winnerId ? 1 : 0.4,
-            cursor: winnerId ? 'pointer' : 'not-allowed',
-            boxShadow: winnerId ? '0 8px 25px rgba(168,85,247,0.3)' : 'none'
-          }}
-          onClick={() => onNext(winnerId!)}>
-          {roundNumber < totalRounds ? 'Next Question' : 'See Final Results'}
-        </button>
-      </div>
     </div>
   );
 };
@@ -2339,6 +2174,15 @@ const FeedbackModal: React.FC<{ open: boolean; onClose: () => void; currentScree
   const [errorMsg, setErrorMsg] = useState('');
 
   const categories = ['Suggest a Meme 🎭', 'Report a Bug 🐛', 'Game Suggestion 🎮', 'General Feedback 💬', 'Other ✨'];
+
+  useEffect(() => {
+    if (open) {
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = 'unset';
+      };
+    }
+  }, [open]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -2916,7 +2760,8 @@ const App: React.FC = () => {
   const [content, setContent] = useState<GameContent[]>([]);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [showFeedback, setShowFeedback] = useState(false);
-  const [showExitApp, setShowExitApp] = useState(false);
+
+  const isExitingRef = useRef(false);
 
   const [isDark] = useState(true);
   const toggleTheme = () => { };
@@ -2939,6 +2784,7 @@ const App: React.FC = () => {
     window.history.replaceState({ screen: 'loading' }, '', window.location.href);
 
     const handlePopState = () => {
+      if (isExitingRef.current) return;
       const currentScreen = screenRef.current;
 
       // For active gameplay, intercept back and show exit game confirm
@@ -2949,10 +2795,8 @@ const App: React.FC = () => {
         return;
       }
 
-      // For home screen, show exit app confirm
+      // For home screen, do not intercept back - let the device/browser exit naturally
       if (currentScreen === 'home') {
-        window.history.pushState({ screen: 'home' }, '', window.location.href);
-        setShowExitApp(true);
         return;
       }
 
@@ -3185,25 +3029,15 @@ const App: React.FC = () => {
     ? Math.min(gameState.currentIdx + 1, gameState.questions.length)
     : (gameSettings?.rounds || 0);
 
-  // Hide FAB on loading screen
-  const showFAB = screen !== 'loading';
+  // Show FAB strictly on home screen and scoreboard page when feedback modal is not open
+  const showFAB = (screen === 'home' || screen === 'scoreboard') && !showFeedback;
 
   return (
     <AnimatedBg isDark={isDark}>
       {/* Feedback Modal */}
       <FeedbackModal open={showFeedback} onClose={() => setShowFeedback(false)} currentScreen={screen} />
 
-      {/* Exit App Confirmation */}
-      <ConfirmModal
-        open={showExitApp}
-        title="Leave the game? 👋"
-        message="You're about to exit. Your current session will not be saved. See you next time!"
-        confirmLabel="Exit App"
-        cancelLabel="Stay"
-        destructive
-        onCancel={() => setShowExitApp(false)}
-        onConfirm={() => { setShowExitApp(false); window.history.go(-1); }}
-      />
+
 
       <AlertModal open={alertInfo.open} title={alertInfo.title} message={alertInfo.message} onOk={() => setAlertInfo({ open: false, title: '', message: '' })} />
       <ConfirmModal
@@ -3245,10 +3079,7 @@ const App: React.FC = () => {
       {screen === 'setup' && <GameSetup onBack={() => navigate('home')} onStart={handleStartGame} isDark={isDark} onToggleTheme={toggleTheme} />}
       {screen === 'lobby' && gameSettings && <GameLobby settings={gameSettings} onStart={() => navigateToScreen('playing')} onBack={() => navigate('setup')} isDark={isDark} onToggleTheme={toggleTheme} />}
       {screen === 'playing' && gameState.currentQuestion && (
-        <GamePlay question={gameState.currentQuestion} roundNumber={gameState.currentIdx + 1} totalRounds={gameState.questions.length} timePerQ={gameSettings?.timePerQ || 30} onReveal={handleReveal} onExit={() => setShowExitConfirm(true)} players={gameState.players} teams={gameState.teams} mode={gameSettings?.mode || 'individual'} />
-      )}
-      {screen === 'reveal' && gameState.currentQuestion && (
-        <RevealScreen question={gameState.currentQuestion} roundNumber={gameState.currentIdx + 1} totalRounds={gameState.questions.length} scores={{ players: gameState.players, teams: gameState.teams, mode: gameSettings?.mode || 'individual' }} currentIdx={gameState.currentIdx} onNext={handleNext} onExit={() => setShowExitConfirm(true)} />
+        <GamePlay question={gameState.currentQuestion} roundNumber={gameState.currentIdx + 1} totalRounds={gameState.questions.length} onNext={handleNext} onExit={() => setShowExitConfirm(true)} players={gameState.players} teams={gameState.teams} mode={gameSettings?.mode || 'individual'} />
       )}
       {screen === 'scoreboard' && (
         <Scoreboard scores={{ players: gameState.players, teams: gameState.teams, mode: gameSettings?.mode || 'individual' }} rounds={scorecardRounds} timePerQ={gameSettings?.timePerQ || 30} onPlayAgain={handlePlayAgain} onNewSetup={handleNewSetup} onHome={() => navigate('home')} isDark={isDark} onToggleTheme={toggleTheme} onFeedback={() => setShowFeedback(true)} />
