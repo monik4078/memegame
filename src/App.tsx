@@ -388,7 +388,6 @@ const ImageWithSpinner: React.FC<{
 // ==================== LOADING SCREEN ====================
 const LoadingScreen: React.FC<{ onComplete: () => void }> = ({ onComplete }) => {
   const [progress, setProgress] = useState(0);
-  const [logoBounce, setLogoBounce] = useState(false);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -402,13 +401,8 @@ const LoadingScreen: React.FC<{ onComplete: () => void }> = ({ onComplete }) => 
       });
     }, 30);
 
-    const bounceTimer = setInterval(() => {
-      setLogoBounce(b => !b);
-    }, 600);
-
     return () => {
       clearInterval(timer);
-      clearInterval(bounceTimer);
     };
   }, [onComplete]);
 
@@ -1908,7 +1902,7 @@ const GamePlay: React.FC<{
 
   return (
     <div className="min-h-screen flex flex-col px-4 py-4">
-      <div className="max-w-6xl w-full mx-auto relative">
+      <div className="max-w-6xl lg:max-w-7xl w-full mx-auto relative">
         <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
           <div className="flex items-center gap-2 flex-wrap">
             <GuessWhatLogo size={24} />
@@ -1945,20 +1939,20 @@ const GamePlay: React.FC<{
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           {/* Left Column: Question & Media */}
-          <div className="lg:col-span-7 space-y-4">
+          <div className="lg:col-span-8 space-y-5">
             <div className="w-full h-1.5 rounded-full mb-2" style={{ background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
               <div className="h-full rounded-full transition-all duration-500" style={{ width: `${progress}%`, background: 'linear-gradient(90deg, #a855f7, #ec4899)' }} />
             </div>
 
-            <div className="rounded-2xl p-6 border border-theme-card bg-theme-card" style={{ backdropFilter: 'blur(10px)' }}>
+            <div className="rounded-2xl p-6 lg:p-10 border border-theme-card bg-theme-card shadow-xl" style={{ backdropFilter: 'blur(10px)' }}>
               {question.imageData && (
                 <div className="mb-4 rounded-xl overflow-hidden flex items-center justify-center bg-black/10 border border-theme-card">
-                  <ImageWithSpinner src={question.imageData} alt="question" className="max-w-full max-h-[45vh] object-contain rounded-xl shadow-md" />
+                  <ImageWithSpinner src={question.imageData} alt="question" className="max-w-full max-h-[45vh] lg:max-h-[55vh] object-contain rounded-xl shadow-md" />
                 </div>
               )}
               {question.videoData && (
                 <div className="mb-4 rounded-xl overflow-hidden bg-black/10 border border-theme-card">
-                  <video src={question.videoData} controls className="w-full max-h-[45vh] object-contain rounded-xl shadow-md" />
+                  <video src={question.videoData} controls className="w-full max-h-[45vh] lg:max-h-[55vh] object-contain rounded-xl shadow-md" />
                 </div>
               )}
               {question.audioData && (
@@ -1969,7 +1963,7 @@ const GamePlay: React.FC<{
                   }}>
                   <div className="w-16 h-16 rounded-full flex items-center justify-center relative bg-gradient-to-r from-cyan-500 to-purple-500 shadow-lg shadow-cyan-500/20">
                     {audioPlaying ? (
-                      <span className="text-2xl animate-bounce">🎵</span>
+                      <span className="text-2xl">🎵</span>
                     ) : (
                       <span className="text-2xl">🔇</span>
                     )}
@@ -2013,9 +2007,9 @@ const GamePlay: React.FC<{
                 </div>
               )}
 
-              <h2 className="text-xl sm:text-2xl font-bold text-center leading-snug">{question.question}</h2>
+              <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold lg:font-extrabold text-center leading-snug lg:leading-normal">{question.question}</h2>
 
-              <div className="flex items-center justify-center gap-1.5 mt-3">
+              <div className="flex items-center justify-center gap-1.5 mt-4">
                 {[1, 2, 3].map(lvl => {
                   const active = question.difficulty === 'easy' ? lvl <= 1 : question.difficulty === 'medium' ? lvl <= 2 : true;
                   const c = question.difficulty === 'easy' ? '#22c55e' : question.difficulty === 'medium' ? '#eab308' : '#ef4444';
@@ -2026,21 +2020,21 @@ const GamePlay: React.FC<{
             </div>
 
             {isMC && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 lg:gap-4">
                 {(question.shuffledOptions || question.options || []).map((opt: string, idx: number) => {
                   const isCorrectOpt = isRevealed && opt === question.answer;
                   return (
                     <div key={idx}
-                      className={`p-4 rounded-xl text-left transition-all duration-300 ${isCorrectOpt
+                      className={`p-4 lg:p-5 rounded-xl text-left transition-all duration-300 ${isCorrectOpt
                         ? 'bg-green-500/20 border-2 border-green-400 shadow-[0_0_15px_rgba(34,197,94,0.3)]'
                         : 'bg-white/5 border border-white/10'
                         }`}>
                       <div className="flex items-center gap-3">
-                        <span className={`w-9 h-9 rounded-lg flex items-center justify-center text-sm font-bold flex-shrink-0 ${isCorrectOpt ? 'bg-green-500/30 text-green-300 font-extrabold' : 'bg-white/10 text-white/50'
+                        <span className={`w-9 h-9 lg:w-10 lg:h-10 rounded-lg flex items-center justify-center text-sm lg:text-base font-bold flex-shrink-0 ${isCorrectOpt ? 'bg-green-500/30 text-green-300 font-extrabold' : 'bg-white/10 text-white/50'
                           }`}>
                           {isCorrectOpt ? '✓' : String.fromCharCode(65 + idx)}
                         </span>
-                        <span className={`text-sm font-medium ${isCorrectOpt ? 'text-green-300 font-bold' : 'text-white/80'}`}>{opt}</span>
+                        <span className={`text-sm lg:text-base font-medium ${isCorrectOpt ? 'text-green-300 font-bold' : 'text-white/80'}`}>{opt}</span>
                       </div>
                     </div>
                   );
@@ -2050,10 +2044,10 @@ const GamePlay: React.FC<{
           </div>
 
           {/* Right Column: Answer Reveal & Host Player Selection */}
-          <div className="lg:col-span-5 space-y-4">
+          <div className="lg:col-span-4 space-y-5">
             {!isRevealed ? (
-              <div className="rounded-2xl p-8 text-center border border-white/10 bg-white/5 backdrop-blur-md flex flex-col items-center justify-center min-h-[200px]">
-                <div className="text-5xl mb-4 animate-bounce">🔒</div>
+              <div className="rounded-2xl p-8 text-center border border-white/10 bg-white/5 backdrop-blur-md flex flex-col items-center justify-center min-h-[220px]">
+                <div className="text-5xl mb-4">🔒</div>
                 <button
                   type="button"
                   onClick={handleRevealAnswer}
@@ -2223,7 +2217,7 @@ const FeedbackModal: React.FC<{ open: boolean; onClose: () => void; currentScree
 
         {status === 'success' ? (
           <div className="p-8 text-center">
-            <div className="text-6xl mb-4 animate-bounce">🎉</div>
+            <div className="text-6xl mb-4">🎉</div>
             <h3 className="text-2xl font-black text-white mb-2">Thanks!</h3>
             <p className="text-white/60">Your feedback has been sent successfully.</p>
             <div className="mt-4 text-4xl">✨</div>
@@ -2341,6 +2335,7 @@ const Scoreboard: React.FC<{
       supabase
         .from('scoreboard')
         .select('*')
+        .gte('rounds', 10)
         .order('total_score', { ascending: false })
         .limit(10)
         .then(({ data, error }) => {
@@ -2349,7 +2344,8 @@ const Scoreboard: React.FC<{
             console.error('[Hall of Fame] Supabase fetch error:', error.message, error.code, error.hint);
             setHofError(`Database error: ${error.message}${error.hint ? ` — ${error.hint}` : ''}`);
           } else {
-            setHallOfFame(data || []);
+            const validEntries = (data || []).filter((entry: any) => (entry.rounds ?? 0) >= 10);
+            setHallOfFame(validEntries);
           }
         });
     }
@@ -2404,7 +2400,7 @@ const Scoreboard: React.FC<{
           <div className="text-center mb-6 relative">
             <div className="inline-block relative">
               <div className="text-7xl mb-2" style={{ filter: 'drop-shadow(0 0 20px rgba(234,179,8,0.6))' }}>🏆</div>
-              <div className="absolute -top-1 -right-1 text-2xl animate-bounce">✨</div>
+              <div className="absolute -top-1 -right-1 text-2xl">✨</div>
             </div>
             <h1 className="text-3xl sm:text-4xl font-black text-white mb-1">
               <span style={{ background: 'linear-gradient(135deg, #eab308, #f97316, #ec4899)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
@@ -2847,6 +2843,12 @@ const App: React.FC = () => {
 
   // Save game results to Supabase scoreboard table
   const saveGameResults = async (players: Player[], teams: Team[], mode: GameMode, numRounds: number, totalScore: number, winnerName: string) => {
+    // Only games with at least 10 questions are eligible for Hall of Fame
+    if (numRounds < 10) {
+      console.log('[saveGameResults] Skipping save to scoreboard as total questions played is less than 10:', numRounds);
+      return;
+    }
+
     // Build insert payload
     const payload = {
       mode,

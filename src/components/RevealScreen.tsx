@@ -27,11 +27,11 @@ const RevealScreen: React.FC = () => {
         </div>
 
         {/* Result Card */}
-        <div className={`game-card p-8 text-center mb-6 animate-bounceIn ${isCorrect ? 'neon-glow-green' : ''}`}>
+        <div className={`game-card p-8 text-center mb-6 animate-fadeIn ${isCorrect ? 'neon-glow-green' : ''}`}>
           {/* Big icon */}
           <div className="text-7xl mb-4">
             {isCorrect ? (
-              <span className="animate-bounce">🎉</span>
+              <span>🎉</span>
             ) : (
               <span className="animate-shake">😅</span>
             )}

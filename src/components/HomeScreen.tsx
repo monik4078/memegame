@@ -23,7 +23,7 @@ const HomeScreen: React.FC = () => {
         <div className="inline-flex items-center gap-3 mb-4">
           <div className="relative">
             <Gamepad2 className="w-16 h-16 text-neon-purple animate-pulse-glow" />
-            <Sparkles className="w-6 h-6 text-neon-yellow absolute -top-2 -right-2 animate-bounce" />
+            <Sparkles className="w-6 h-6 text-neon-yellow absolute -top-2 -right-2" />
           </div>
         </div>
         <h1 className="text-6xl sm:text-7xl font-black gradient-text mb-3 font-outfit">

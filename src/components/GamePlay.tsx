@@ -80,7 +80,7 @@ const GamePlay: React.FC = () => {
   return (
     <div className="min-h-screen bg-animated flex flex-col p-4">
       {/* Top bar */}
-      <div className="max-w-3xl w-full mx-auto">
+      <div className="max-w-3xl lg:max-w-6xl w-full mx-auto">
         <div className="flex items-center justify-between mb-4 animate-slideDown">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="badge bg-white/10 text-white/60">
@@ -126,11 +126,11 @@ const GamePlay: React.FC = () => {
         </div>
 
         {/* Question Card */}
-        <div className="game-card p-6 mb-4 animate-scaleIn">
+        <div className="game-card p-6 lg:p-10 mb-6 animate-scaleIn shadow-xl">
           {/* Image if available */}
           {content.imageUrl && content.imageUrl !== '' && (
-            <div className="mb-4 rounded-xl overflow-hidden bg-white/5 flex items-center justify-center min-h-[180px]">
-              <img src={content.imageUrl} alt="Meme" className="max-w-full max-h-[280px] object-contain" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; (e.target as HTMLImageElement).parentElement!.innerHTML = '<span class="text-6xl opacity-30">🖼️</span>'; }} />
+            <div className="mb-6 rounded-xl overflow-hidden bg-white/5 flex items-center justify-center min-h-[220px]">
+              <img src={content.imageUrl} alt="Meme" className="max-w-full max-h-[350px] lg:max-h-[500px] object-contain" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; (e.target as HTMLImageElement).parentElement!.innerHTML = '<span class="text-6xl opacity-30">🖼️</span>'; }} />
             </div>
           )}
 
@@ -157,7 +157,7 @@ const GamePlay: React.FC = () => {
           )}
 
           {/* Question text */}
-          <h2 className="text-xl sm:text-2xl font-bold text-center leading-snug">{content.question}</h2>
+          <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold lg:font-extrabold text-center leading-snug lg:leading-normal">{content.question}</h2>
 
           {/* Difficulty dots */}
           <div className="flex items-center justify-center gap-1.5 mt-3">

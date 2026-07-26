@@ -61,7 +61,7 @@ const Scoreboard: React.FC = () => {
       <div className="max-w-xl w-full">
         {/* Winner celebration */}
         {winner && (
-          <div className="text-center mb-8 animate-bounceIn">
+          <div className="text-center mb-8 animate-fadeIn">
             <div className="text-7xl mb-4">🏆</div>
             <h1 className="text-4xl sm:text-5xl font-black gradient-text mb-2 font-outfit">
               {winner.name} Wins!
