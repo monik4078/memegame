@@ -47,6 +47,8 @@ interface GameContent {
   audioUrl?: string;
   audioData?: string;
   audioHint?: string;
+  answerAudioUrl?: string;
+  answerAudioData?: string;
   difficulty: 'easy' | 'medium' | 'hard';
   points: number;
   movie?: string;
@@ -177,6 +179,8 @@ function mapFromDb(dbItem: any): GameContent {
     audioUrl: dbItem.audio_url || undefined,
     audioData: dbItem.audio_url || undefined,
     audioHint: dbItem.audio_hint || undefined,
+    answerAudioUrl: dbItem.answer_audio_url || undefined,
+    answerAudioData: dbItem.answer_audio_url || undefined,
     difficulty: dbItem.difficulty as 'easy' | 'medium' | 'hard',
     points: dbItem.points,
     movie: dbItem.movie || undefined,
@@ -686,6 +690,7 @@ const AdminScreen: React.FC<{
     videoData: '' as string,
     audioData: '' as string,
     audioHint: '',
+    answerAudioData: '' as string,
     difficulty: 'medium' as 'easy' | 'medium' | 'hard',
     points: 20,
     movie: '',
@@ -694,6 +699,7 @@ const AdminScreen: React.FC<{
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [audioFile, setAudioFile] = useState<File | null>(null);
+  const [answerAudioFile, setAnswerAudioFile] = useState<File | null>(null);
 
   const [uploading, setUploading] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -782,6 +788,7 @@ const AdminScreen: React.FC<{
       let imageUrl = form.imageData;
       let videoUrl = form.videoData;
       let audioUrl = form.audioData;
+      let answerAudioUrl = form.answerAudioData;
 
       const uploadToStorage = async (file: File, prefix: string) => {
         const fileExt = file.name.split('.').pop();
@@ -809,10 +816,14 @@ const AdminScreen: React.FC<{
       if (audioFile) {
         audioUrl = await uploadToStorage(audioFile, 'aud');
       }
+      if (answerAudioFile) {
+        answerAudioUrl = await uploadToStorage(answerAudioFile, 'ans_aud');
+      }
 
       if (!form.imageData) imageUrl = '';
       if (!form.videoData) videoUrl = '';
       if (!form.audioData) audioUrl = '';
+      if (!form.answerAudioData) answerAudioUrl = '';
 
       const dbPayload = {
         type: form.type,
@@ -824,6 +835,7 @@ const AdminScreen: React.FC<{
         video_url: videoUrl || null,
         audio_url: audioUrl || null,
         audio_hint: form.audioHint || null,
+        answer_audio_url: answerAudioUrl || null,
         difficulty: form.difficulty,
         points: form.points,
         movie: form.movie ? form.movie.trim() : null,
@@ -843,6 +855,10 @@ const AdminScreen: React.FC<{
           }
           if (originalItem.audioUrl && (audioFile || !form.audioData) && !isMediaUsedByOthers(originalItem.audioUrl, editId)) {
             const name = getFileNameFromUrl(originalItem.audioUrl);
+            if (name) filesToDelete.push(name);
+          }
+          if (originalItem.answerAudioUrl && (answerAudioFile || !form.answerAudioData) && !isMediaUsedByOthers(originalItem.answerAudioUrl, editId)) {
+            const name = getFileNameFromUrl(originalItem.answerAudioUrl);
             if (name) filesToDelete.push(name);
           }
 
@@ -868,11 +884,11 @@ const AdminScreen: React.FC<{
       }
 
       await onRefresh();
-
-      setForm({ type: 'meme-dialogue', questionType: 'open-ended', question: '', answer: '', options: ['', '', '', ''], imageData: '', videoData: '', audioData: '', audioHint: '', difficulty: 'medium', points: 20, movie: '' });
+      setForm({ type: 'meme-dialogue', questionType: 'open-ended', question: '', answer: '', options: ['', '', '', ''], imageData: '', videoData: '', audioData: '', audioHint: '', answerAudioData: '', difficulty: 'medium', points: 20, movie: '' });
       setImageFile(null);
       setVideoFile(null);
       setAudioFile(null);
+      setAnswerAudioFile(null);
       setShowForm(false);
       setEditId(null);
       setIsCreatingFolder(false);
@@ -892,10 +908,11 @@ const AdminScreen: React.FC<{
       question: item.question,
       answer: item.answer,
       options: item.options ? [...item.options, '', '', '', ''].slice(0, 4) : ['', '', '', ''],
-      imageData: item.imageData || '',
-      videoData: item.videoData || '',
-      audioData: item.audioData || '',
+      imageData: item.imageUrl || item.imageData || '',
+      videoData: item.videoUrl || item.videoData || '',
+      audioData: item.audioUrl || item.audioData || '',
       audioHint: item.audioHint || '',
+      answerAudioData: item.answerAudioUrl || item.answerAudioData || '',
       difficulty: item.difficulty,
       points: item.points,
       movie: item.movie || '',
@@ -903,11 +920,12 @@ const AdminScreen: React.FC<{
     setImageFile(null);
     setVideoFile(null);
     setAudioFile(null);
+    setAnswerAudioFile(null);
     setIsCreatingFolder(!item.movie);
     setShowForm(true);
   };
 
-  const handleFileUpload = async (type: 'image' | 'video' | 'audio', e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (type: 'image' | 'video' | 'audio' | 'answerAudio', e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const maxSize = type === 'image' ? 5 * 1024 * 1024 : 10 * 1024 * 1024;
@@ -918,18 +936,10 @@ const AdminScreen: React.FC<{
     setUploading(type);
     try {
       const base64 = await fileToBase64(file);
-      if (type === 'image') {
-        setForm(f => ({ ...f, imageData: base64 }));
-        setImageFile(file);
-      }
-      if (type === 'video') {
-        setForm(f => ({ ...f, videoData: base64 }));
-        setVideoFile(file);
-      }
-      if (type === 'audio') {
-        setForm(f => ({ ...f, audioData: base64 }));
-        setAudioFile(file);
-      }
+      if (type === 'image') { setForm(f => ({ ...f, imageData: base64 })); setImageFile(file); }
+      if (type === 'video') { setForm(f => ({ ...f, videoData: base64 })); setVideoFile(file); }
+      if (type === 'audio') { setForm(f => ({ ...f, audioData: base64 })); setAudioFile(file); }
+      if (type === 'answerAudio') { setForm(f => ({ ...f, answerAudioData: base64 })); setAnswerAudioFile(file); }
     } catch (err) {
       setAlertInfo({ open: true, title: 'Upload failed', message: 'Could not process the file.' });
     }
@@ -950,7 +960,7 @@ const AdminScreen: React.FC<{
         </div>
       </div>
 
-      {item.imageUrl || item.imageData ? (
+      {(item.imageUrl || item.imageData) ? (
         <div className="mb-4 overflow-hidden rounded-3xl border border-white/10">
           <ImageWithSpinner src={item.imageUrl || item.imageData!} alt="Content preview" className="h-44 w-full object-cover" />
         </div>
@@ -982,9 +992,10 @@ const AdminScreen: React.FC<{
       <div className="mt-5 flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-white/10">
         <div className="flex flex-wrap gap-2">
           <span className="text-xs px-2 py-1 rounded-full" style={{ background: 'rgba(234,179,8,0.15)', color: '#eab308' }}>{item.points} pts</span>
-          {item.imageData && <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-purple-500/15 text-purple-200"><ImageIcon className="w-3 h-3" /> Image</span>}
-          {item.videoData && <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-pink-500/15 text-pink-200"><Video className="w-3 h-3" /> Video</span>}
-          {item.audioData && <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-cyan-500/15 text-cyan-200"><Music className="w-3 h-3" /> Audio</span>}
+          {(item.imageData || item.imageUrl) && <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-purple-500/15 text-purple-200"><ImageIcon className="w-3 h-3" /> Image</span>}
+          {(item.videoData || item.videoUrl) && <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-pink-500/15 text-pink-200"><Video className="w-3 h-3" /> Video</span>}
+          {(item.audioData || item.audioUrl) && <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-cyan-500/15 text-cyan-200"><Music className="w-3 h-3" /> Audio</span>}
+          {(item.answerAudioUrl || item.answerAudioData) && <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-green-500/15 text-green-200"><Mic2 className="w-3 h-3" /> Answer Audio</span>}
         </div>
         <div className="flex gap-2">
           <button onClick={() => startEdit(item)} className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/80 hover:bg-white/10 transition"><Edit3 className="w-4 h-4" /> Edit</button>
@@ -1001,9 +1012,7 @@ const AdminScreen: React.FC<{
     filtered.forEach(item => {
       if (item.movie && item.movie.trim()) {
         const key = item.movie.trim();
-        if (!movieGroups[key]) {
-          movieGroups[key] = [];
-        }
+        if (!movieGroups[key]) movieGroups[key] = [];
         movieGroups[key].push(item);
       } else {
         independent.push(item);
@@ -1026,32 +1035,14 @@ const AdminScreen: React.FC<{
         onConfirm={async () => {
           if (deleteTarget) {
             try {
-              const { error } = await supabase
-                .from('game_content')
-                .delete()
-                .eq('id', deleteTarget.id);
+              const { error } = await supabase.from('game_content').delete().eq('id', deleteTarget.id);
               if (error) throw error;
-
               const filesToDelete: string[] = [];
-              if (deleteTarget.imageUrl && !isMediaUsedByOthers(deleteTarget.imageUrl, deleteTarget.id)) {
-                const name = getFileNameFromUrl(deleteTarget.imageUrl);
-                if (name) filesToDelete.push(name);
-              }
-              if (deleteTarget.videoUrl && !isMediaUsedByOthers(deleteTarget.videoUrl, deleteTarget.id)) {
-                const name = getFileNameFromUrl(deleteTarget.videoUrl);
-                if (name) filesToDelete.push(name);
-              }
-              if (deleteTarget.audioUrl && !isMediaUsedByOthers(deleteTarget.audioUrl, deleteTarget.id)) {
-                const name = getFileNameFromUrl(deleteTarget.audioUrl);
-                if (name) filesToDelete.push(name);
-              }
-
-              if (filesToDelete.length > 0) {
-                await supabase.storage
-                  .from('game-media')
-                  .remove(filesToDelete);
-              }
-
+              if (deleteTarget.imageUrl && !isMediaUsedByOthers(deleteTarget.imageUrl, deleteTarget.id)) { const name = getFileNameFromUrl(deleteTarget.imageUrl); if (name) filesToDelete.push(name); }
+              if (deleteTarget.videoUrl && !isMediaUsedByOthers(deleteTarget.videoUrl, deleteTarget.id)) { const name = getFileNameFromUrl(deleteTarget.videoUrl); if (name) filesToDelete.push(name); }
+              if (deleteTarget.audioUrl && !isMediaUsedByOthers(deleteTarget.audioUrl, deleteTarget.id)) { const name = getFileNameFromUrl(deleteTarget.audioUrl); if (name) filesToDelete.push(name); }
+              if (deleteTarget.answerAudioUrl && !isMediaUsedByOthers(deleteTarget.answerAudioUrl, deleteTarget.id)) { const name = getFileNameFromUrl(deleteTarget.answerAudioUrl); if (name) filesToDelete.push(name); }
+              if (filesToDelete.length > 0) await supabase.storage.from('game-media').remove(filesToDelete);
               await onRefresh();
               setShowForm(false);
               setEditId(null);
@@ -1067,57 +1058,33 @@ const AdminScreen: React.FC<{
       <div className="max-w-4xl mx-auto">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
           <div className="flex items-center gap-3">
-            <button onClick={onBack} className="w-10 h-10 rounded-xl flex items-center justify-center border border-theme-card bg-theme-card" style={{ backdropFilter: 'blur(10px)' }}>
+            <button onClick={onBack} className="w-10 h-10 rounded-xl flex items-center justify-center border border-theme-card bg-theme-card">
               <ArrowLeft className="w-5 h-5" />
             </button>
             <GuessWhatLogo size={36} />
             <div>
               <h1 className="text-2xl font-bold"><GradientText>Admin Panel</GradientText></h1>
-              <p className="text-white/40 text-sm">
-                {adminEmail ? `Logged in as: ${adminEmail}` : 'Manage your game content'}
-              </p>
+              <p className="text-white/40 text-sm">{adminEmail ? `Logged in as: ${adminEmail}` : 'Manage your game content'}</p>
             </div>
           </div>
           <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
-            <button
-              onClick={onLogout}
-              className="p-3 rounded-xl flex items-center justify-center hover:scale-105 transition-all shadow-md cursor-pointer border border-red-500/20 hover:bg-red-500/10 text-red-400"
-              title="Sign Out"
-            >
+            <button onClick={onLogout} className="p-3 rounded-xl flex items-center justify-center hover:scale-105 transition-all shadow-md cursor-pointer border border-red-500/20 hover:bg-red-500/10 text-red-400" title="Sign Out">
               <LogOut className="w-5 h-5" />
             </button>
             <button
               className="flex items-center gap-2 px-4 sm:px-5 py-2.5 rounded-xl font-semibold text-white border-0 cursor-pointer transition-all hover:opacity-90 text-sm"
               style={{ background: 'linear-gradient(135deg, #a855f7, #ec4899)' }}
-              onClick={() => { setShowForm(true); setEditId(null); setForm({ type: 'meme-dialogue', questionType: 'open-ended', question: '', answer: '', options: ['', '', '', ''], imageData: '', videoData: '', audioData: '', audioHint: '', difficulty: 'medium', points: 20, movie: selectedFolder && selectedFolder !== '__independent__' ? selectedFolder : '' }); setIsCreatingFolder(!selectedFolder || selectedFolder === '__independent__'); setImageFile(null); setVideoFile(null); setAudioFile(null); }}
+              onClick={() => { setShowForm(true); setEditId(null); setForm({ type: 'meme-dialogue', questionType: 'open-ended', question: '', answer: '', options: ['', '', '', ''], imageData: '', videoData: '', audioData: '', audioHint: '', answerAudioData: '', difficulty: 'medium', points: 20, movie: selectedFolder && selectedFolder !== '__independent__' ? selectedFolder : '' }); setIsCreatingFolder(!selectedFolder || selectedFolder === '__independent__'); setImageFile(null); setVideoFile(null); setAudioFile(null); setAnswerAudioFile(null); }}
             >
               <Plus className="w-4 h-4" /> Add Content
             </button>
           </div>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-          {[
-            { n: content.length, label: 'Total', color: '#a855f7' },
-            { n: content.filter(c => c.type === 'meme-dialogue').length, label: 'Memes', color: '#22c55e' },
-            { n: content.filter(c => c.type === 'song-tune').length, label: 'Songs', color: '#ec4899' },
-            { n: content.filter(c => c.type === 'movie-meme').length, label: 'Movies', color: '#06b6d4' },
-          ].map((s, i) => (
-            <div key={i} className="rounded-xl p-4 text-center border border-theme-card bg-theme-card">
-              <p className="text-2xl font-bold" style={{ color: s.color }}>{s.n}</p>
-              <p className="text-xs text-white/40">{s.label}</p>
-            </div>
-          ))}
-        </div>
-
         {showForm && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
-            <div
-              className="absolute inset-0 bg-black/65 backdrop-blur-xl"
-              onClick={() => { setShowForm(false); setEditId(null); }}
-            />
+            <div className="absolute inset-0 bg-black/65 backdrop-blur-xl" onClick={() => { setShowForm(false); setEditId(null); }} />
             <div className="relative w-full max-w-4xl max-h-[90vh] overflow-hidden rounded-[24px] sm:rounded-[32px] border border-white/10 bg-slate-950/95 shadow-[0_40px_120px_rgba(0,0,0,0.55)] flex flex-col animate-fadeIn">
-              {/* Sticky Header */}
               <div className="flex items-start justify-between gap-3 p-5 sm:p-6 border-b border-white/10 flex-shrink-0">
                 <div>
                   <h2 className="text-xl sm:text-2xl font-bold">{editId ? 'Edit Content' : 'Add New Content'}</h2>
@@ -1128,14 +1095,11 @@ const AdminScreen: React.FC<{
                 </button>
               </div>
 
-              {/* Scrollable Form Body */}
               <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div>
                     <label className="text-sm text-white/60 mb-1 block">Type</label>
-                    <select className="w-full rounded-xl px-4 py-3 text-white border-0 outline-none"
-                      style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}
-                      value={form.type} onChange={e => setForm({ ...form, type: e.target.value as ContentType })}>
+                    <select className="w-full rounded-xl px-4 py-3 text-white border-0 outline-none" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }} value={form.type} onChange={e => setForm({ ...form, type: e.target.value as ContentType })}>
                       <option value="meme-dialogue" style={{ background: '#1a1a2e' }}>Meme Dialogue</option>
                       <option value="song-tune" style={{ background: '#1a1a2e' }}>Song Tune</option>
                       <option value="movie-meme" style={{ background: '#1a1a2e' }}>Movie Meme</option>
@@ -1143,21 +1107,14 @@ const AdminScreen: React.FC<{
                   </div>
                   <div>
                     <label className="text-sm text-white/60 mb-1 block">Question Type</label>
-                    <select className="w-full rounded-xl px-4 py-3 text-white border-0 outline-none"
-                      style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}
-                      value={form.questionType} onChange={e => setForm({ ...form, questionType: e.target.value as QuestionType })}>
+                    <select className="w-full rounded-xl px-4 py-3 text-white border-0 outline-none" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }} value={form.questionType} onChange={e => setForm({ ...form, questionType: e.target.value as QuestionType })}>
                       <option value="multiple-choice" style={{ background: '#1a1a2e' }}>Multiple Choice</option>
                       <option value="open-ended" style={{ background: '#1a1a2e' }}>Open Ended</option>
                     </select>
                   </div>
                   <div>
                     <label className="text-sm text-white/60 mb-1 block">Difficulty</label>
-                    <select className="w-full rounded-xl px-4 py-3 text-white border-0 outline-none"
-                      style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}
-                      value={form.difficulty} onChange={e => {
-                        const d = e.target.value as 'easy' | 'medium' | 'hard';
-                        setForm({ ...form, difficulty: d, points: d === 'easy' ? 10 : d === 'medium' ? 20 : 30 });
-                      }}>
+                    <select className="w-full rounded-xl px-4 py-3 text-white border-0 outline-none" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }} value={form.difficulty} onChange={e => { const d = e.target.value as 'easy' | 'medium' | 'hard'; setForm({ ...form, difficulty: d, points: d === 'easy' ? 10 : d === 'medium' ? 20 : 30 }); }}>
                       <option value="easy" style={{ background: '#1a1a2e' }}>Easy (10 pts)</option>
                       <option value="medium" style={{ background: '#1a1a2e' }}>Medium (20 pts)</option>
                       <option value="hard" style={{ background: '#1a1a2e' }}>Hard (30 pts)</option>
@@ -1185,16 +1142,12 @@ const AdminScreen: React.FC<{
                       </button>
                     ))}
                   </div>
-                  <textarea className="w-full rounded-xl px-4 py-3 text-white outline-none text-sm" rows={2}
-                    style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}
-                    placeholder="Enter a custom question or pick a suggestion above..." value={form.question} onChange={e => setForm({ ...form, question: e.target.value })} />
+                  <textarea className="w-full rounded-xl px-4 py-3 text-white outline-none text-sm" rows={2} style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }} placeholder="Enter a custom question or pick a suggestion above..." value={form.question} onChange={e => setForm({ ...form, question: e.target.value })} />
                 </div>
 
                 <div>
                   <label className="text-sm text-white/60 mb-1 block">Correct Answer</label>
-                  <input className="w-full rounded-xl px-4 py-3 text-white outline-none text-sm"
-                    style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}
-                    placeholder="The correct answer" value={form.answer} onChange={e => setForm({ ...form, answer: e.target.value })} />
+                  <input className="w-full rounded-xl px-4 py-3 text-white outline-none text-sm" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }} placeholder="The correct answer" value={form.answer} onChange={e => setForm({ ...form, answer: e.target.value })} />
                 </div>
 
                 <div>
@@ -1203,113 +1156,79 @@ const AdminScreen: React.FC<{
                     <input
                       className="w-full rounded-xl px-4 py-3 text-white outline-none text-sm"
                       style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}
-                      placeholder="Type movie name (e.g. Shrek, Iron Man, or leave blank for independent)"
+                      placeholder="Type folder name, or leave blank for Independent Content"
                       value={form.movie || ''}
                       onChange={e => {
                         setForm({ ...form, movie: e.target.value });
                         setShowMovieSuggestions(true);
                       }}
                       onFocus={() => setShowMovieSuggestions(true)}
+                      onBlur={() => setTimeout(() => setShowMovieSuggestions(false), 150)}
                     />
-                    {showMovieSuggestions && (form.movie || '').trim() !== '' && availableFolders.filter(f => f.toLowerCase().includes((form.movie || '').trim().toLowerCase())).length > 0 && (
-                      <div className="absolute left-0 right-0 top-full mt-1.5 z-50 rounded-2xl border border-purple-500/30 bg-slate-900/95 p-2 shadow-2xl backdrop-blur-xl max-h-48 overflow-y-auto">
-                        <p className="px-3 py-1.5 text-[10px] uppercase font-bold text-white/40 tracking-wider">Existing Folders</p>
-                        {availableFolders
-                          .filter(f => f.toLowerCase().includes((form.movie || '').trim().toLowerCase()))
-                          .map(folder => (
-                            <button
-                              key={folder}
-                              type="button"
-                              className="w-full text-left px-3 py-2 text-xs text-white/80 hover:bg-purple-500/20 hover:text-white rounded-xl transition-colors flex items-center gap-2 cursor-pointer"
-                              onClick={() => {
-                                setForm({ ...form, movie: folder });
-                                setShowMovieSuggestions(false);
-                              }}
-                            >
-                              <Folder className="w-3.5 h-3.5 text-cyan-400" />
-                              <span>{folder}</span>
-                            </button>
-                          ))}
-                      </div>
-                    )}
+                    {showMovieSuggestions && (() => {
+                      const query = (form.movie || '').trim().toLowerCase();
+                      const matchingFolders = availableFolders.filter(f => f.toLowerCase().includes(query));
+                      const showIndependent = 'independent content'.includes(query);
+                      if (matchingFolders.length === 0 && !showIndependent) return null;
+                      return (
+                        <div className="absolute left-0 right-0 top-full mt-1.5 z-50 rounded-2xl border border-purple-500/30 bg-slate-900/95 p-2 shadow-2xl backdrop-blur-xl max-h-48 overflow-y-auto">
+                          {matchingFolders.length > 0 && (
+                            <>
+                              <p className="px-3 py-1.5 text-[10px] uppercase font-bold text-white/40 tracking-wider">Existing Folders</p>
+                              {matchingFolders.map(folder => (
+                                <button
+                                  key={folder}
+                                  type="button"
+                                  className="w-full text-left px-3 py-2 text-xs text-white/80 hover:bg-purple-500/20 hover:text-white rounded-xl transition-colors flex items-center gap-2 cursor-pointer"
+                                  onMouseDown={() => {
+                                    setForm({ ...form, movie: folder });
+                                    setShowMovieSuggestions(false);
+                                  }}
+                                >
+                                  <Folder className="w-3.5 h-3.5 text-cyan-400" />
+                                  <span>{folder}</span>
+                                </button>
+                              ))}
+                            </>
+                          )}
+                          {showIndependent && (
+                            <>
+                              {matchingFolders.length > 0 && <div className="my-1 border-t border-white/10" />}
+                              <button
+                                type="button"
+                                className="w-full text-left px-3 py-2 text-xs text-white/80 hover:bg-purple-500/20 hover:text-white rounded-xl transition-colors flex items-center gap-2 cursor-pointer"
+                                onMouseDown={() => {
+                                  setForm({ ...form, movie: '' });
+                                  setShowMovieSuggestions(false);
+                                }}
+                              >
+                                <Folder className="w-3.5 h-3.5 text-purple-400" />
+                                <span>Independent Content <span className="text-white/40">(no folder)</span></span>
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
 
                 {form.questionType === 'multiple-choice' && (
                   <div>
-                    <label className="text-sm text-white/60 mb-1 block">Options (include the correct answer)</label>
+                    <label className="text-sm text-white/60 mb-1 block">Options</label>
                     {form.options.map((opt, i) => (
                       <div key={i} className="flex items-center gap-2 mb-2">
-                        <span className="text-xs text-white/30 w-5">{i + 1}.</span>
-                        <input className="flex-1 rounded-xl px-4 py-2.5 text-white outline-none text-sm"
-                          style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}
-                          placeholder={`Option ${i + 1}`} value={opt} onChange={e => {
-                            const opts = [...form.options];
-                            opts[i] = e.target.value;
-                            setForm({ ...form, options: opts });
-                          }} />
-                        <button className={`text-xs px-3 py-1.5 rounded-lg transition-all ${form.answer === opt ? 'text-green-400 font-bold' : 'text-white/30'}`}
-                          style={{ background: form.answer === opt ? 'rgba(34,197,94,0.15)' : 'rgba(255,255,255,0.05)' }}
-                          onClick={() => setForm({ ...form, answer: opt })}>
-                          {form.answer === opt ? '✓ Answer' : 'Set Answer'}
-                        </button>
+                        <input className="flex-1 rounded-xl px-4 py-2.5 text-white outline-none text-sm" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }} placeholder={`Option ${i + 1}`} value={opt} onChange={e => { const opts = [...form.options]; opts[i] = e.target.value; setForm({ ...form, options: opts }); }} />
+                        <button className={`text-xs px-3 py-1.5 rounded-lg ${form.answer === opt ? 'bg-green-500/20 text-green-400' : 'bg-white/5 text-white/30'}`} onClick={() => setForm({ ...form, answer: opt })}>Set Answer</button>
                       </div>
                     ))}
                   </div>
                 )}
 
                 <div>
-                  <label className="text-sm text-white/60 mb-2 block">Upload Media (Optional)</label>
-                  {mediaLibrary.length > 0 && (
-                    <div className="mb-3 rounded-xl p-4" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                      <div className="flex items-center gap-2 mb-3">
-                        <SoftIcon icon={FolderOpen} color="#38bdf8" size="sm" />
-                        <div>
-                          <p className="text-sm font-semibold text-white/80">Reuse existing media</p>
-                          <p className="text-xs text-white/40">Pick an asset already uploaded for another question.</p>
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                        {(['image', 'video', 'audio'] as const).map(kind => {
-                          const items = mediaLibrary.filter(item => item.kind === kind);
-                          const Icon = kind === 'image' ? ImageIcon : kind === 'video' ? Video : Music;
-                          return (
-                            <label key={kind} className="block">
-                              <span className="mb-1 flex items-center gap-1.5 text-xs uppercase tracking-[0.14em] text-white/35">
-                                <Icon className="w-3.5 h-3.5" /> {kind}
-                              </span>
-                              <select
-                                className="w-full rounded-xl px-3 py-2.5 text-white outline-none text-xs"
-                                style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}
-                                value={kind === 'image' ? form.imageData : kind === 'video' ? form.videoData : form.audioData}
-                                onChange={e => {
-                                  const value = e.target.value;
-                                  if (kind === 'image') {
-                                    setForm(f => ({ ...f, imageData: value }));
-                                    setImageFile(null);
-                                  } else if (kind === 'video') {
-                                    setForm(f => ({ ...f, videoData: value }));
-                                    setVideoFile(null);
-                                  } else {
-                                    setForm(f => ({ ...f, audioData: value }));
-                                    setAudioFile(null);
-                                  }
-                                }}
-                              >
-                                <option value="" style={{ background: '#1a1a2e' }}>No reused {kind}</option>
-                                {items.map(item => (
-                                  <option key={`${item.kind}:${item.url}`} value={item.url} style={{ background: '#1a1a2e' }}>
-                                    {item.folder} - {item.label.slice(0, 44)}
-                                  </option>
-                                ))}
-                              </select>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <label className="text-sm text-white/60 mb-2 block">Upload Media</label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {/* Image Upload */}
                     <div className="rounded-xl p-4 text-center" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
                       <SoftIcon icon={ImageIcon} color="#a855f7" className="mx-auto mb-2" />
                       <p className="text-xs text-white/40 mb-2">Image (max 5MB)</p>
@@ -1325,6 +1244,7 @@ const AdminScreen: React.FC<{
                       )}
                     </div>
 
+                    {/* Video Upload */}
                     <div className="rounded-xl p-4 text-center" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
                       <SoftIcon icon={Video} color="#ec4899" className="mx-auto mb-2" />
                       <p className="text-xs text-white/40 mb-2">Video (max 10MB)</p>
@@ -1340,17 +1260,36 @@ const AdminScreen: React.FC<{
                       )}
                     </div>
 
+                    {/* Question Audio (plays at question reveal) */}
                     <div className="rounded-xl p-4 text-center" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
                       <SoftIcon icon={Mic2} color="#06b6d4" className="mx-auto mb-2" />
-                      <p className="text-xs text-white/40 mb-2">Audio (max 10MB)</p>
+                      <p className="text-xs text-white/40 mb-1">Question Audio</p>
+                      <p className="text-[10px] text-white/25 mb-2">Plays when question is shown</p>
                       <label className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-xs cursor-pointer" style={{ background: 'rgba(6,182,212,0.15)', color: '#06b6d4' }}>
                         <Upload className="w-3.5 h-3.5" /> {form.audioData ? 'Replace' : 'Upload'}
                         <input type="file" accept="audio/*" onChange={e => handleFileUpload('audio', e)} className="hidden" />
                       </label>
                       {form.audioData && (
                         <div className="mt-2">
-                          <audio src={form.audioData} controls className="w-full" />
+                          <audio src={form.audioData} controls className="w-full h-8 rounded-lg" />
                           <button onClick={() => { setForm(f => ({ ...f, audioData: '' })); setAudioFile(null); }} className="text-xs text-red-400 mt-1">Remove</button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Answer Audio (plays when answer is revealed) */}
+                    <div className="rounded-xl p-4 text-center" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(34,197,94,0.08)' }}>
+                      <SoftIcon icon={Music} color="#22c55e" className="mx-auto mb-2" />
+                      <p className="text-xs text-white/40 mb-1">Answer Audio</p>
+                      <p className="text-[10px] text-white/25 mb-2">Plays when answer is revealed</p>
+                      <label className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-xs cursor-pointer" style={{ background: 'rgba(34,197,94,0.15)', color: '#22c55e' }}>
+                        <Upload className="w-3.5 h-3.5" /> {form.answerAudioData ? 'Replace' : 'Upload'}
+                        <input type="file" accept="audio/*" onChange={e => handleFileUpload('answerAudio', e)} className="hidden" />
+                      </label>
+                      {form.answerAudioData && (
+                        <div className="mt-2">
+                          <audio src={form.answerAudioData} controls className="w-full h-8 rounded-lg" />
+                          <button onClick={() => { setForm(f => ({ ...f, answerAudioData: '' })); setAnswerAudioFile(null); }} className="text-xs text-red-400 mt-1">Remove</button>
                         </div>
                       )}
                     </div>
@@ -1507,7 +1446,7 @@ const AdminScreen: React.FC<{
                     <button
                       className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
                       style={{ background: 'linear-gradient(135deg, #a855f7, #ec4899)' }}
-                      onClick={() => { setShowForm(true); setEditId(null); setForm({ type: 'meme-dialogue', questionType: 'open-ended', question: '', answer: '', options: ['', '', '', ''], imageData: '', videoData: '', audioData: '', audioHint: '', difficulty: 'medium', points: 20, movie: selectedFolder === '__independent__' ? '' : selectedFolder }); setIsCreatingFolder(selectedFolder === '__independent__'); setImageFile(null); setVideoFile(null); setAudioFile(null); }}
+                      onClick={() => { setShowForm(true); setEditId(null); setForm({ type: 'meme-dialogue', questionType: 'open-ended', question: '', answer: '', options: ['', '', '', ''], imageData: '', videoData: '', audioData: '', audioHint: '', answerAudioData: '', difficulty: 'medium', points: 20, movie: selectedFolder === '__independent__' ? '' : selectedFolder }); setIsCreatingFolder(selectedFolder === '__independent__'); setImageFile(null); setVideoFile(null); setAudioFile(null); setAnswerAudioFile(null); }}
                     >
                       <Plus className="w-4 h-4" /> Add question
                     </button>
@@ -1835,11 +1774,17 @@ const GamePlay: React.FC<{
   const [audioPlaying, setAudioPlaying] = useState(false);
   const [waveHeights, setWaveHeights] = useState<number[]>(Array(15).fill(4));
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const answerAudioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     setIsRevealed(false);
     setSelectedWinnerId(null);
     setShowHint(false);
+    // Stop any answer audio from previous question
+    if (answerAudioRef.current) {
+      answerAudioRef.current.pause();
+      answerAudioRef.current = null;
+    }
   }, [question.id]);
 
   // Audio Playback Autoplay Logic
@@ -1898,6 +1843,20 @@ const GamePlay: React.FC<{
 
   const handleRevealAnswer = () => {
     setIsRevealed(true);
+    // Play answer audio if available
+    const answerAudio = question.answerAudioData || question.answerAudioUrl;
+    if (answerAudio) {
+      // Stop question audio first
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+        setAudioPlaying(false);
+      }
+      const audio = new Audio(answerAudio);
+      answerAudioRef.current = audio;
+      audio.play().catch(err => console.error('Answer audio playback failed:', err));
+      audio.onended = () => { answerAudioRef.current = null; };
+    }
   };
 
   return (
@@ -3031,8 +2990,9 @@ const App: React.FC = () => {
     ? Math.min(gameState.currentIdx + 1, gameState.questions.length)
     : (gameSettings?.rounds || 0);
 
-  // Show FAB strictly on home screen and scoreboard page when feedback modal is not open
-  const showFAB = (screen === 'home' || screen === 'scoreboard') && !showFeedback;
+  // Show FAB only on home screen — NOT on scoreboard (scoreboard has inline feedback prompt
+  // and the FAB at bottom-right covers the Home button on mobile per common_mistakes_to_avoid.md §1)
+  const showFAB = screen === 'home' && !showFeedback;
 
   return (
     <AnimatedBg isDark={isDark}>
