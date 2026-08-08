@@ -24,6 +24,8 @@ import {
   Users,
   Video,
   X,
+  Eye,
+  Volume2,
 } from 'lucide-react';
 
 
@@ -144,6 +146,47 @@ async function sendFeedbackToTelegram(name: string, category: string, message: s
     return { success: true };
   } catch (err: any) {
     console.error('Error sending Telegram feedback:', err);
+    return { success: false, error: err.message || 'Network error occurred.' };
+  }
+}
+
+// Standalone utility to send waitlist signup to Telegram Bot
+async function sendWaitlistToTelegram(name: string, email: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const token = (import.meta as any).env.VITE_TELEGRAM_BOT_TOKEN;
+    const chatId = (import.meta as any).env.VITE_TELEGRAM_CHAT_ID;
+
+    if (!token || !chatId || token === 'placeholder' || chatId === 'placeholder' || !token.trim() || !chatId.trim()) {
+      return {
+        success: false,
+        error: 'Telegram bot credentials are not configured in the .env file. Please check VITE_TELEGRAM_BOT_TOKEN and VITE_TELEGRAM_CHAT_ID.'
+      };
+    }
+
+    const cleanName = name.trim() || 'Anonymous';
+    const cleanEmail = email.trim();
+    const formattedText = `🚀 <b>New Waitlist Signup for Custom Game!</b>\n\n👤 <b>Name:</b> ${cleanName}\n📧 <b>Email:</b> ${cleanEmail}\n\n<i>This person has joined the waitlist to make their own game!</i>`;
+
+    const response = await fetch(`https://api.telegram.org/bot${token.trim()}/sendMessage`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        chat_id: chatId.trim(),
+        text: formattedText,
+        parse_mode: 'HTML',
+      }),
+    });
+
+    if (!response.ok) {
+      const errData = await response.json();
+      return { success: false, error: errData.description || 'API request failed.' };
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error sending Telegram waitlist signup:', err);
     return { success: false, error: err.message || 'Network error occurred.' };
   }
 }
@@ -661,6 +704,162 @@ const HomeScreen: React.FC<{
   );
 };
 
+// ==================== QUESTION PREVIEW MODAL ====================
+const QuestionPreviewModal: React.FC<{ item: GameContent; onClose: () => void }> = ({ item, onClose }) => {
+  const [isRevealed, setIsRevealed] = useState(false);
+  const [audioPlaying, setAudioPlaying] = useState(false);
+  const [answerAudioPlaying, setAnswerAudioPlaying] = useState(false);
+  const [showHint, setShowHint] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const answerAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    const qAudio = item.audioData || item.audioUrl;
+    if (qAudio) {
+      const audio = new Audio(qAudio);
+      audioRef.current = audio;
+      audio.play().then(() => setAudioPlaying(true)).catch(() => {});
+      audio.onended = () => setAudioPlaying(false);
+    }
+
+    return () => {
+      document.body.style.overflow = 'unset';
+      if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
+      if (answerAudioRef.current) { answerAudioRef.current.pause(); answerAudioRef.current = null; }
+    };
+  }, [item]);
+
+  const playAnswerAudio = () => {
+    const aAudio = item.answerAudioData || item.answerAudioUrl;
+    if (!aAudio) return;
+    if (audioRef.current) { audioRef.current.pause(); setAudioPlaying(false); }
+    if (answerAudioRef.current) { answerAudioRef.current.pause(); }
+
+    const audio = new Audio(aAudio);
+    answerAudioRef.current = audio;
+    setAnswerAudioPlaying(true);
+    audio.play().then(() => setAnswerAudioPlaying(true)).catch(err => {
+      console.error(err);
+      setAnswerAudioPlaying(false);
+    });
+    audio.onended = () => { setAnswerAudioPlaying(false); answerAudioRef.current = null; };
+  };
+
+  const handleReveal = () => {
+    setIsRevealed(true);
+    playAnswerAudio();
+  };
+
+  const typeLabel = (t: string) => t === 'meme-dialogue' ? 'Meme Dialogue' : t === 'song-tune' ? 'Song Tune' : 'Movie Meme';
+
+  return (
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(14px)' }} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="w-full max-w-2xl rounded-3xl border border-purple-500/30 bg-slate-900/95 p-6 shadow-2xl overflow-y-auto max-h-[90vh]">
+        <div className="flex items-center justify-between pb-4 mb-4 border-b border-white/10">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs px-2.5 py-1 rounded-full font-semibold bg-purple-500/20 text-purple-300 flex items-center gap-1.5 border border-purple-500/30">
+              <Eye className="w-3.5 h-3.5" /> Question Test Preview
+            </span>
+            <span className="text-xs px-2.5 py-1 rounded-full font-semibold bg-yellow-500/20 text-yellow-300 border border-yellow-500/30">
+              {item.points} pts
+            </span>
+            <span className="text-xs px-2.5 py-1 rounded-full font-semibold bg-white/10 text-white/70">
+              {typeLabel(item.type)}
+            </span>
+            {item.movie && (
+              <span className="text-xs px-2.5 py-1 rounded-full font-semibold bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                📁 {item.movie}
+              </span>
+            )}
+          </div>
+          <button onClick={onClose} className="w-8 h-8 rounded-xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="space-y-4">
+          {(item.imageUrl || item.imageData) && (
+            <div className="overflow-hidden rounded-2xl border border-white/10 flex items-center justify-center bg-black/20">
+              <ImageWithSpinner src={item.imageUrl || item.imageData!} alt="Preview" className="max-h-[40vh] w-full object-contain rounded-2xl" />
+            </div>
+          )}
+
+          {(item.videoUrl || item.videoData) && (
+            <div className="overflow-hidden rounded-2xl border border-white/10 bg-black/20">
+              <video src={item.videoUrl || item.videoData} controls className="max-h-[40vh] w-full object-contain rounded-2xl" />
+            </div>
+          )}
+
+          {(item.audioUrl || item.audioData) && (
+            <div className="p-5 rounded-2xl border border-purple-500/30 bg-purple-500/10 flex flex-col items-center gap-3">
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">{audioPlaying ? '🎵' : '🔇'}</span>
+                <span className="text-sm font-bold text-purple-300">{audioPlaying ? 'Question Audio Playing' : 'Question Audio Ready'}</span>
+              </div>
+              {item.audioHint && (
+                <div className="w-full text-center">
+                  <button type="button" onClick={() => setShowHint(!showHint)} className="text-xs text-white/50 underline hover:text-white/80">
+                    {showHint ? 'Hide Text Clue' : 'Show Text Clue'}
+                  </button>
+                  {showHint && <p className="mt-2 p-3 text-xs bg-white/5 rounded-xl border border-white/10 text-white/80">{item.audioHint}</p>}
+                </div>
+              )}
+            </div>
+          )}
+
+          <h2 className="text-xl font-bold text-white text-center leading-snug">{item.question}</h2>
+
+          {item.questionType === 'multiple-choice' && item.options && item.options.length > 0 && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2">
+              {item.options.map((opt, idx) => {
+                const isCorrect = isRevealed && opt === item.answer;
+                return (
+                  <div key={idx} className={`p-3.5 rounded-xl border transition-all ${isCorrect ? 'bg-green-500/20 border-green-400 text-green-200 font-bold shadow-[0_0_15px_rgba(34,197,94,0.2)]' : 'bg-white/5 border-white/10 text-white/80'}`}>
+                    <div className="flex items-center gap-2.5">
+                      <span className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0 ${isCorrect ? 'bg-green-500/30 text-green-300' : 'bg-white/10 text-white/60'}`}>{isCorrect ? '✓' : String.fromCharCode(65 + idx)}</span>
+                      <span className="text-sm">{opt}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {!isRevealed ? (
+            <button onClick={handleReveal} className="w-full py-3.5 rounded-xl text-base font-bold text-white flex items-center justify-center gap-2 transition-all cursor-pointer shadow-lg active:scale-[0.98]" style={{ background: 'linear-gradient(135deg, #a855f7, #ec4899)' }}>
+              👁️ Reveal Answer
+            </button>
+          ) : (
+            <div className="p-5 rounded-2xl border-2 border-green-500/40 bg-green-500/10 text-center animate-fadeIn shadow-[0_0_20px_rgba(34,197,94,0.15)]">
+              <div className="text-2xl mb-1">🎯</div>
+              <h3 className="text-xs font-bold uppercase tracking-wider text-green-400 mb-1">Correct Answer</h3>
+              <p className="text-2xl font-black text-white">{item.answer}</p>
+              {(item.answerAudioData || item.answerAudioUrl) && (
+                <button
+                  type="button"
+                  onClick={playAnswerAudio}
+                  className="mt-3 inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold text-white transition-all hover:scale-105 active:scale-95 cursor-pointer shadow-lg"
+                  style={{ background: 'linear-gradient(135deg, #10b981, #06b6d4)', boxShadow: '0 4px 15px rgba(16,185,129,0.3)' }}
+                >
+                  <Volume2 className={`w-4 h-4 ${answerAudioPlaying ? 'animate-bounce' : ''}`} />
+                  <span>{answerAudioPlaying ? 'Playing Sound...' : '🔊 Replay Answer Audio'}</span>
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="mt-6 pt-4 border-t border-white/10 flex justify-end">
+          <button onClick={onClose} className="px-5 py-2.5 rounded-xl bg-white/10 text-white font-semibold hover:bg-white/20 transition-colors cursor-pointer">
+            Close Preview
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ==================== ADMIN SCREEN ====================
 const AdminScreen: React.FC<{
   content: GameContent[];
@@ -704,11 +903,25 @@ const AdminScreen: React.FC<{
   const [uploading, setUploading] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<GameContent | null>(null);
+  const [previewQuestion, setPreviewQuestion] = useState<GameContent | null>(null);
   const [alertInfo, setAlertInfo] = useState<{ open: boolean; title: string; message: string }>({ open: false, title: '', message: '' });
+
+  const folderScrollPosRef = useRef<number>(0);
+  const [prevSelectedFolder, setPrevSelectedFolder] = useState<string | null>(null);
 
   useEffect(() => {
     setContent(initialContent);
   }, [initialContent]);
+
+  useEffect(() => {
+    if (prevSelectedFolder !== null && selectedFolder === null) {
+      const savedY = folderScrollPosRef.current;
+      requestAnimationFrame(() => {
+        window.scrollTo({ top: savedY, behavior: 'instant' as ScrollBehavior });
+      });
+    }
+    setPrevSelectedFolder(selectedFolder);
+  }, [selectedFolder]);
 
   useEffect(() => {
     if (showForm) {
@@ -998,8 +1211,9 @@ const AdminScreen: React.FC<{
           {(item.answerAudioUrl || item.answerAudioData) && <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-green-500/15 text-green-200"><Mic2 className="w-3 h-3" /> Answer Audio</span>}
         </div>
         <div className="flex gap-2">
-          <button onClick={() => startEdit(item)} className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/80 hover:bg-white/10 transition"><Edit3 className="w-4 h-4" /> Edit</button>
-          <button onClick={() => setDeleteTarget(item)} className="inline-flex items-center gap-1.5 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-200 hover:bg-red-500/20 transition"><Trash2 className="w-4 h-4" /> Delete</button>
+          <button onClick={() => setPreviewQuestion(item)} className="inline-flex items-center gap-1.5 rounded-xl border border-cyan-500/30 bg-cyan-500/15 px-3 py-2 text-sm text-cyan-200 hover:bg-cyan-500/25 transition cursor-pointer" title="Test how this question looks and sounds"><Eye className="w-4 h-4" /> Test</button>
+          <button onClick={() => startEdit(item)} className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/80 hover:bg-white/10 transition cursor-pointer"><Edit3 className="w-4 h-4" /> Edit</button>
+          <button onClick={() => setDeleteTarget(item)} className="inline-flex items-center gap-1.5 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-200 hover:bg-red-500/20 transition cursor-pointer"><Trash2 className="w-4 h-4" /> Delete</button>
         </div>
       </div>
     </div>
@@ -1090,9 +1304,43 @@ const AdminScreen: React.FC<{
                   <h2 className="text-xl sm:text-2xl font-bold">{editId ? 'Edit Content' : 'Add New Content'}</h2>
                   <p className="text-xs sm:text-sm text-white/50">Background is locked while editing. Save or delete when ready.</p>
                 </div>
-                <button onClick={() => { setShowForm(false); setEditId(null); }} className="w-10 h-10 rounded-2xl flex items-center justify-center bg-white/10 hover:bg-white/15 transition flex-shrink-0">
-                  <X className="w-5 h-5" />
-                </button>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!form.question || !form.answer) {
+                        showAlert('Missing information', 'Please enter at least a question and answer to preview.');
+                        return;
+                      }
+                      setPreviewQuestion({
+                        id: editId || 'temp-preview',
+                        type: form.type,
+                        questionType: form.questionType,
+                        question: form.question,
+                        answer: form.answer,
+                        options: form.options.filter(Boolean),
+                        imageData: form.imageData,
+                        imageUrl: form.imageData,
+                        videoData: form.videoData,
+                        videoUrl: form.videoData,
+                        audioData: form.audioData,
+                        audioUrl: form.audioData,
+                        audioHint: form.audioHint,
+                        answerAudioData: form.answerAudioData,
+                        answerAudioUrl: form.answerAudioData,
+                        difficulty: form.difficulty,
+                        points: form.points,
+                        movie: form.movie,
+                      });
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-cyan-200 bg-cyan-500/20 border border-cyan-500/30 hover:bg-cyan-500/30 transition-all cursor-pointer shadow-md"
+                  >
+                    <Eye className="w-4 h-4" /> Preview
+                  </button>
+                  <button onClick={() => { setShowForm(false); setEditId(null); }} className="w-10 h-10 rounded-2xl flex items-center justify-center bg-white/10 hover:bg-white/15 transition flex-shrink-0">
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
               </div>
 
               <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-4">
@@ -1374,7 +1622,10 @@ const AdminScreen: React.FC<{
               return (
                 <button
                   key={movieName}
-                  onClick={() => setSelectedFolder(movieName)}
+                  onClick={() => {
+                    folderScrollPosRef.current = window.scrollY;
+                    setSelectedFolder(movieName);
+                  }}
                   className="group min-h-[170px] rounded-2xl border border-white/10 bg-white/[0.04] p-5 text-left transition-all hover:-translate-y-1 hover:border-cyan-400/35 hover:bg-cyan-400/[0.07] shadow-[0_18px_60px_rgba(0,0,0,0.12)]"
                 >
                   <div className="flex items-start justify-between gap-3">
@@ -1401,7 +1652,10 @@ const AdminScreen: React.FC<{
 
             {groupedContent.independent.length > 0 && (
               <button
-                onClick={() => setSelectedFolder('__independent__')}
+                onClick={() => {
+                  folderScrollPosRef.current = window.scrollY;
+                  setSelectedFolder('__independent__');
+                }}
                 className="group min-h-[170px] rounded-2xl border border-white/10 bg-white/[0.04] p-5 text-left transition-all hover:-translate-y-1 hover:border-purple-400/35 hover:bg-purple-400/[0.07] shadow-[0_18px_60px_rgba(0,0,0,0.12)]"
               >
                 <div className="flex items-start justify-between gap-3">
@@ -1460,6 +1714,7 @@ const AdminScreen: React.FC<{
           </div>
         )}
       </div>
+      {previewQuestion && <QuestionPreviewModal item={previewQuestion} onClose={() => setPreviewQuestion(null)} />}
     </div>
   );
 };
@@ -1772,6 +2027,7 @@ const GamePlay: React.FC<{
   const [selectedWinnerId, setSelectedWinnerId] = useState<string | null>(null);
   const [showHint, setShowHint] = useState(false);
   const [audioPlaying, setAudioPlaying] = useState(false);
+  const [answerAudioPlaying, setAnswerAudioPlaying] = useState(false);
   const [waveHeights, setWaveHeights] = useState<number[]>(Array(15).fill(4));
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const answerAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -1780,6 +2036,7 @@ const GamePlay: React.FC<{
     setIsRevealed(false);
     setSelectedWinnerId(null);
     setShowHint(false);
+    setAnswerAudioPlaying(false);
     // Stop any answer audio from previous question
     if (answerAudioRef.current) {
       answerAudioRef.current.pause();
@@ -1841,22 +2098,36 @@ const GamePlay: React.FC<{
   const QuestionTypeIcon = contentIconMap[question.type];
   const entities = mode === 'team' ? teams : players;
 
+  const playAnswerAudio = () => {
+    const answerAudio = question.answerAudioData || question.answerAudioUrl;
+    if (!answerAudio) return;
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+      setAudioPlaying(false);
+    }
+    if (answerAudioRef.current) {
+      answerAudioRef.current.pause();
+      answerAudioRef.current = null;
+    }
+    const audio = new Audio(answerAudio);
+    answerAudioRef.current = audio;
+    setAnswerAudioPlaying(true);
+    audio.play()
+      .then(() => setAnswerAudioPlaying(true))
+      .catch(err => {
+        console.error('Answer audio playback failed:', err);
+        setAnswerAudioPlaying(false);
+      });
+    audio.onended = () => {
+      setAnswerAudioPlaying(false);
+      answerAudioRef.current = null;
+    };
+  };
+
   const handleRevealAnswer = () => {
     setIsRevealed(true);
-    // Play answer audio if available
-    const answerAudio = question.answerAudioData || question.answerAudioUrl;
-    if (answerAudio) {
-      // Stop question audio first
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current = null;
-        setAudioPlaying(false);
-      }
-      const audio = new Audio(answerAudio);
-      answerAudioRef.current = audio;
-      audio.play().catch(err => console.error('Answer audio playback failed:', err));
-      audio.onended = () => { answerAudioRef.current = null; };
-    }
+    playAnswerAudio();
   };
 
   return (
@@ -2022,6 +2293,17 @@ const GamePlay: React.FC<{
                   <h3 className="text-xs font-bold uppercase tracking-widest text-green-400 mb-1">The Correct Answer Is</h3>
                   <p className="text-2xl font-black text-white mb-1 break-words">{question.answer}</p>
                   <p className="text-xs text-yellow-400 font-semibold">⭐ Worth {question.points} Points ⭐</p>
+                  {(question.answerAudioData || question.answerAudioUrl) && (
+                    <button
+                      type="button"
+                      onClick={playAnswerAudio}
+                      className="mt-3 inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold text-white transition-all hover:scale-105 active:scale-95 cursor-pointer shadow-lg"
+                      style={{ background: 'linear-gradient(135deg, #10b981, #06b6d4)', boxShadow: '0 4px 15px rgba(16,185,129,0.3)' }}
+                    >
+                      <Volume2 className={`w-4 h-4 ${answerAudioPlaying ? 'animate-bounce' : ''}`} />
+                      <span>{answerAudioPlaying ? 'Playing Sound...' : '🔊 Replay Answer Audio'}</span>
+                    </button>
+                  )}
                 </div>
 
                 {/* Host Player/Team Selection */}
@@ -2118,9 +2400,11 @@ const GamePlay: React.FC<{
   );
 };
 
-// ==================== FEEDBACK MODAL ====================
-const FeedbackModal: React.FC<{ open: boolean; onClose: () => void; currentScreen?: string }> = ({ open, onClose, currentScreen }) => {
+// ==================== FEEDBACK & WAITLIST MODAL ====================
+const FeedbackModal: React.FC<{ open: boolean; onClose: () => void; currentScreen?: string; initialTab?: 'feedback' | 'waitlist' }> = ({ open, onClose, currentScreen, initialTab = 'feedback' }) => {
+  const [activeModalTab, setActiveModalTab] = useState<'feedback' | 'waitlist'>(initialTab);
   const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
   const [category, setCategory] = useState('General Feedback');
   const [message, setMessage] = useState('');
   const [status, setStatus] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
@@ -2130,14 +2414,17 @@ const FeedbackModal: React.FC<{ open: boolean; onClose: () => void; currentScree
 
   useEffect(() => {
     if (open) {
+      setActiveModalTab(initialTab);
+      setStatus('idle');
+      setErrorMsg('');
       document.body.style.overflow = 'hidden';
       return () => {
         document.body.style.overflow = 'unset';
       };
     }
-  }, [open]);
+  }, [open, initialTab]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleFeedbackSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!message.trim()) return;
     setStatus('sending');
@@ -2152,37 +2439,90 @@ const FeedbackModal: React.FC<{ open: boolean; onClose: () => void; currentScree
     }
   };
 
+  const handleWaitlistSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim()) return;
+    setStatus('sending');
+    setErrorMsg('');
+    const result = await sendWaitlistToTelegram(name, email);
+    if (result.success) {
+      setStatus('success');
+      setTimeout(() => { setStatus('idle'); setName(''); setEmail(''); onClose(); }, 2500);
+    } else {
+      setStatus('error');
+      setErrorMsg(result.error || 'Failed to join waitlist.');
+    }
+  };
+
   if (!open) return null;
 
   return (
     <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center px-4 pb-4 sm:pb-0" style={{ background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(14px)' }} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="w-full max-w-lg rounded-3xl overflow-hidden shadow-2xl" style={{ background: 'linear-gradient(145deg, rgba(18,18,42,0.98), rgba(30,20,60,0.98))', border: '1px solid rgba(168,85,247,0.25)', maxHeight: '90vh', overflowY: 'auto' }}>
-        {/* Header */}
+        {/* Header with Navigation Tabs */}
         <div className="relative p-6 pb-4" style={{ background: 'linear-gradient(135deg, rgba(168,85,247,0.15), rgba(236,72,153,0.1))' }}>
           <div className="absolute inset-0 opacity-30" style={{ backgroundImage: 'radial-gradient(circle at 20% 50%, rgba(168,85,247,0.3) 0%, transparent 50%), radial-gradient(circle at 80% 20%, rgba(236,72,153,0.2) 0%, transparent 50%)' }} />
-          <div className="relative flex items-center justify-between">
+          <div className="relative flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-2xl" style={{ background: 'linear-gradient(135deg, rgba(168,85,247,0.3), rgba(236,72,153,0.2))', border: '1px solid rgba(168,85,247,0.4)' }}>💬</div>
+              <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-2xl" style={{ background: 'linear-gradient(135deg, rgba(168,85,247,0.3), rgba(236,72,153,0.2))', border: '1px solid rgba(168,85,247,0.4)' }}>
+                {activeModalTab === 'feedback' ? '💬' : '🚀'}
+              </div>
               <div>
-                <h2 className="text-xl font-black text-white">Share Feedback</h2>
-                <p className="text-xs text-white/50">Your thoughts help us improve!</p>
+                <h2 className="text-xl font-black text-white">
+                  {activeModalTab === 'feedback' ? 'Share Feedback' : 'Create Your Game'}
+                </h2>
+                <p className="text-xs text-white/50">
+                  {activeModalTab === 'feedback' ? 'Your thoughts help us improve!' : 'Join the waitlist to build custom games!'}
+                </p>
               </div>
             </div>
-            <button onClick={onClose} className="w-9 h-9 rounded-xl flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 transition-all">
+            <button onClick={onClose} className="w-9 h-9 rounded-xl flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 transition-all cursor-pointer">
               <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Modal Navigation Tabs */}
+          <div className="relative flex rounded-xl p-1 bg-black/30 border border-white/10">
+            <button
+              type="button"
+              onClick={() => { setActiveModalTab('feedback'); setStatus('idle'); }}
+              className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                activeModalTab === 'feedback'
+                  ? 'bg-purple-600/80 text-white shadow-md'
+                  : 'text-white/50 hover:text-white/80'
+              }`}
+            >
+              💬 Feedback
+            </button>
+            <button
+              type="button"
+              onClick={() => { setActiveModalTab('waitlist'); setStatus('idle'); }}
+              className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                activeModalTab === 'waitlist'
+                  ? 'bg-gradient-to-r from-pink-500 to-purple-600 text-white shadow-md'
+                  : 'text-white/50 hover:text-white/80'
+              }`}
+            >
+              🚀 Make Your Game
             </button>
           </div>
         </div>
 
         {status === 'success' ? (
-          <div className="p-8 text-center">
+          <div className="p-8 text-center animate-fadeIn">
             <div className="text-6xl mb-4">🎉</div>
-            <h3 className="text-2xl font-black text-white mb-2">Thanks!</h3>
-            <p className="text-white/60">Your feedback has been sent successfully.</p>
+            <h3 className="text-2xl font-black text-white mb-2">
+              {activeModalTab === 'waitlist' ? "You're on the Waitlist!" : 'Thanks!'}
+            </h3>
+            <p className="text-white/60 text-sm">
+              {activeModalTab === 'waitlist'
+                ? "We'll notify you as soon as custom game creation goes live!"
+                : 'Your feedback has been sent successfully.'}
+            </p>
             <div className="mt-4 text-4xl">✨</div>
           </div>
-        ) : (
-          <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        ) : activeModalTab === 'feedback' ? (
+          <form onSubmit={handleFeedbackSubmit} className="p-6 space-y-4">
             {/* Name */}
             <div>
               <label className="text-xs font-bold uppercase tracking-wider text-white/50 block mb-1.5">Your Name <span className="text-white/30 normal-case font-normal">(optional)</span></label>
@@ -2202,7 +2542,7 @@ const FeedbackModal: React.FC<{ open: boolean; onClose: () => void; currentScree
               <div className="grid grid-cols-2 gap-2">
                 {categories.map(cat => (
                   <button key={cat} type="button" onClick={() => setCategory(cat)}
-                    className="px-3 py-2.5 rounded-xl text-xs font-semibold text-left transition-all"
+                    className="px-3 py-2.5 rounded-xl text-xs font-semibold text-left transition-all cursor-pointer"
                     style={{
                       background: category === cat ? 'linear-gradient(135deg, rgba(168,85,247,0.3), rgba(236,72,153,0.2))' : 'rgba(255,255,255,0.05)',
                       border: category === cat ? '1px solid rgba(168,85,247,0.5)' : '1px solid rgba(255,255,255,0.08)',
@@ -2238,12 +2578,66 @@ const FeedbackModal: React.FC<{ open: boolean; onClose: () => void; currentScree
             <button
               type="submit"
               disabled={status === 'sending' || !message.trim()}
-              className="w-full py-4 rounded-xl font-bold text-white text-sm transition-all active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2"
+              className="w-full py-4 rounded-xl font-bold text-white text-sm transition-all active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
               style={{ background: 'linear-gradient(135deg, #a855f7, #ec4899)', boxShadow: '0 8px 25px rgba(168,85,247,0.35)' }}>
               {status === 'sending' ? (
                 <><span className="animate-spin">⟳</span> Sending...</>
               ) : (
                 <>✈️ Send Feedback</>
+              )}
+            </button>
+          </form>
+        ) : (
+          <form onSubmit={handleWaitlistSubmit} className="p-6 space-y-4">
+            {/* Waitlist Banner */}
+            <div className="p-4 rounded-2xl border border-pink-500/20 bg-pink-500/10 text-center">
+              <div className="text-2xl mb-1">✨</div>
+              <p className="text-xs font-bold text-pink-300">Want to create custom meme games for your friends or events?</p>
+              <p className="text-[11px] text-white/60 mt-1">Leave your details below and get early access when builder mode launches!</p>
+            </div>
+
+            {/* Name */}
+            <div>
+              <label className="text-xs font-bold uppercase tracking-wider text-white/50 block mb-1.5">Your Name <span className="text-white/30 normal-case font-normal">(optional)</span></label>
+              <input
+                type="text"
+                value={name}
+                onChange={e => setName(e.target.value)}
+                placeholder="Game Creator / Team Lead 🎮"
+                className="w-full px-4 py-3 rounded-xl text-sm text-white outline-none transition-all focus:ring-2 focus:ring-pink-500/50"
+                style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }}
+              />
+            </div>
+
+            {/* Email */}
+            <div>
+              <label className="text-xs font-bold uppercase tracking-wider text-white/50 block mb-1.5">Email Address <span className="text-red-400">*</span></label>
+              <input
+                type="email"
+                required
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                className="w-full px-4 py-3 rounded-xl text-sm text-white outline-none transition-all focus:ring-2 focus:ring-pink-500/50"
+                style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }}
+              />
+            </div>
+
+            {status === 'error' && (
+              <div className="p-3 rounded-xl text-sm text-red-300" style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.25)' }}>
+                ⚠️ {errorMsg}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={status === 'sending' || !email.trim()}
+              className="w-full py-4 rounded-xl font-bold text-white text-sm transition-all active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
+              style={{ background: 'linear-gradient(135deg, #ec4899, #a855f7)', boxShadow: '0 8px 25px rgba(236,72,153,0.35)' }}>
+              {status === 'sending' ? (
+                <><span className="animate-spin">⟳</span> Joining Waitlist...</>
+              ) : (
+                <>🚀 Join Waitlist</>
               )}
             </button>
           </form>
