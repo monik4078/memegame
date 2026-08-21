@@ -880,28 +880,31 @@ const QuestionPreviewModal: React.FC<{ item: GameContent; onClose: () => void }>
   );
 };
 
-// Preset suggested question prompts for quick-fill in content creator (sets question ONLY)
+// Simple suggested question prompts for quick 1-click insert (sets question ONLY)
 const SUGGESTED_QUESTION_PROMPTS: Record<string, string[]> = {
   'meme-dialogue': [
-    'What is the famous dialogue from this meme?',
-    'Complete the meme: "One does not simply ___"',
-    'What phrase is associated with this meme?',
-    'The "Distracted Boyfriend" meme represents what?',
-    'What action is performed in this famous meme?',
+    'Guess the dialogue',
+    'Guess the meme',
+    'Complete the line',
+    'Guess the character',
   ],
   'song-tune': [
-    '🎵 Identify this tune: "Tum hi ho, ab tum hi ho..."',
-    '🎵 Identify the song: "Never gonna give you up..."',
-    '🎵 "Na na na na, hey hey hey, goodbye!" — Name this song',
-    '🎵 "Baby Shark doo doo..." — What song is this?',
-    '🎵 Guess the movie or song played in this audio clip:',
+    'Guess the song title',
+    'Guess the movie song',
+    'Identify this tune',
+    'Name the singer',
   ],
   'movie-meme': [
-    'Which movie is referenced by the meme: "I am Groot"?',
-    'This meme: "I am your father" — Which movie and character?',
-    'The "Leonardo DiCaprio pointing at TV" meme is from which movie?',
-    'The "Matrix Red Pill vs Blue Pill" meme references what concept?',
-    'Which movie scene is recreated in this meme?',
+    'Guess the movie',
+    'Guess the scene',
+    'Guess the character',
+    'Guess the movie meme',
+  ],
+  'default': [
+    'Guess the movie',
+    'Guess the song title',
+    'Guess the dialogue',
+    'Guess the meme',
   ],
 };
 
@@ -1539,7 +1542,7 @@ const AdminScreen: React.FC<{
                       <span className="text-xs text-pink-400 font-semibold flex items-center gap-1">
                         💡 Suggested:
                       </span>
-                      {(SUGGESTED_QUESTION_PROMPTS[form.type] || SUGGESTED_QUESTION_PROMPTS['meme-dialogue'] || []).map((qText, idx) => (
+                      {(SUGGESTED_QUESTION_PROMPTS[form.type] || SUGGESTED_QUESTION_PROMPTS['default'] || []).map((qText, idx) => (
                         <button
                           key={idx}
                           type="button"
