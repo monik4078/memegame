@@ -2129,44 +2129,69 @@ const GameLobby: React.FC<{
     const channelName = `session_${settings.sessionId.toUpperCase()}`;
     const channel = supabase.channel(channelName, { config: { broadcast: { ack: true } } });
 
-    channel.on('broadcast', { event: 'player_join' }, (payload) => {
-      if (!payload?.payload?.playerName) return;
-      const cleanName = payload.payload.playerName.trim();
-      const teamId = payload.payload.teamId;
+    channel
+      .on('broadcast', { event: 'player_join' }, (payload) => {
+        if (!payload?.payload?.playerName) return;
+        const cleanName = payload.payload.playerName.trim();
+        const teamId = payload.payload.teamId;
 
-      setLobbyPlayers((prev) => {
-        const exists = prev.some(p => p.name.toLowerCase() === cleanName.toLowerCase());
-        if (exists) {
+        setLobbyPlayers((prev) => {
+          const exists = prev.some(p => p.name.toLowerCase() === cleanName.toLowerCase());
+          if (exists) {
+            channel.send({
+              type: 'broadcast',
+              event: 'name_rejected',
+              payload: { playerName: cleanName, reason: 'Name taken' },
+            });
+            return prev;
+          }
+
           channel.send({
             type: 'broadcast',
-            event: 'name_rejected',
-            payload: { playerName: cleanName, reason: 'Name taken' },
+            event: 'player_approved',
+            payload: { playerName: cleanName },
           });
-          return prev;
-        }
 
-        channel.send({
-          type: 'broadcast',
-          event: 'player_approved',
-          payload: { playerName: cleanName },
+          const updated = [...prev, {
+            id: Date.now().toString() + '_' + Math.random().toString(36).substring(2, 5),
+            name: cleanName,
+            score: 0,
+            teamId,
+            streak: 0,
+            bestStreak: 0,
+            correctAnswers: 0,
+            totalAnswers: 0,
+          }];
+          onUpdatePlayers(updated);
+          return updated;
         });
+      })
+      .on('broadcast', { event: 'player_rejoin' }, (payload) => {
+        // Page-refresh re-announce — re-add if not already present
+        if (!payload?.payload?.playerName) return;
+        const cleanName = payload.payload.playerName.trim();
+        const teamId = payload.payload.teamId;
 
-        const updated = [...prev, {
-          id: Date.now().toString() + '_' + Math.random().toString(36).substring(2, 5),
-          name: cleanName,
-          score: 0,
-          teamId,
-          streak: 0,
-          bestStreak: 0,
-          correctAnswers: 0,
-          totalAnswers: 0,
-        }];
-        onUpdatePlayers(updated);
-        return updated;
-      });
-    });
+        setLobbyPlayers((prev) => {
+          const exists = prev.some(p => p.name.toLowerCase() === cleanName.toLowerCase());
+          if (exists) return prev; // Already in list, no-op
 
-    channel.subscribe();
+          const updated = [...prev, {
+            id: Date.now().toString() + '_' + Math.random().toString(36).substring(2, 5),
+            name: cleanName,
+            score: 0,
+            teamId,
+            streak: 0,
+            bestStreak: 0,
+            correctAnswers: 0,
+            totalAnswers: 0,
+          }];
+          onUpdatePlayers(updated);
+          return updated;
+        });
+      })
+      .subscribe();
+
     return () => {
       supabase.removeChannel(channel);
     };
@@ -2351,80 +2376,71 @@ const GamePlay: React.FC<{
     }
   }, [question.id]);
 
+  const playersRef = useRef(players);
+  useEffect(() => { playersRef.current = players; }, [players]);
+
   useEffect(() => {
     if (!sessionId) return;
 
     const channelName = `session_${sessionId.toUpperCase()}`;
     const channel = supabase.channel(channelName, { config: { broadcast: { ack: true } } });
 
-    channel.subscribe((status) => {
-      if (status === 'SUBSCRIBED') {
-        channel.send({
-          type: 'broadcast',
-          event: 'question_change',
-          payload: { questionIndex: roundNumber - 1, questionId: question.id },
-        });
-      }
-    });
-
-    // Realtime Join Event in GamePlay
-    channel.on('broadcast', { event: 'player_join' }, (payload) => {
-      if (!payload?.payload?.playerName) return;
-      const cleanName = payload.payload.playerName.trim();
-      const teamId = payload.payload.teamId;
-
-      const exists = players.some(p => p.name.toLowerCase() === cleanName.toLowerCase());
-      if (exists) {
+    channel
+      .on('broadcast', { event: 'player_join' }, (payload) => {
+        // Game is already in progress — reject ALL new joins
+        if (!payload?.payload?.playerName) return;
+        const cleanName = payload.payload.playerName.trim();
         channel.send({
           type: 'broadcast',
           event: 'name_rejected',
-          payload: { playerName: cleanName, reason: 'Name taken' },
+          payload: { playerName: cleanName, reason: 'Game started' },
         });
-      } else {
-        channel.send({
-          type: 'broadcast',
-          event: 'player_approved',
-          payload: { playerName: cleanName },
+      })
+      .on('broadcast', { event: 'player_rejoin' }, () => {
+        // Page-refresh re-announce from already-joined player — no-op, they're already in the list
+      })
+      .on('broadcast', { event: 'player_buzz' }, (payload) => {
+        // Realtime Buzz Event for ALL Players (1st, 2nd, 3rd...)
+        if (!payload?.payload) return;
+        const b: BuzzerEntry = payload.payload;
+
+        setLiveBuzzes((prev) => {
+          // Only prevent duplicate buzzes from the SAME player on the SAME question
+          if (prev.some((entry) => entry.playerName.toLowerCase() === b.playerName.toLowerCase())) return prev;
+          
+          const updated = [...prev, b].sort((x, y) => x.timestamp - y.timestamp);
+
+          const rank = updated.findIndex((e) => e.playerName.toLowerCase() === b.playerName.toLowerCase()) + 1;
+          channel.send({
+            type: 'broadcast',
+            event: 'buzz_ack',
+            payload: { playerName: b.playerName, rank },
+          });
+
+          return updated;
         });
-        onPlayerJoined({
-          id: Date.now().toString() + '_' + Math.random().toString(36).substring(2, 5),
-          name: cleanName,
-          score: 0,
-          teamId,
-          streak: 0,
-          bestStreak: 0,
-          correctAnswers: 0,
-          totalAnswers: 0,
-        });
-      }
-    });
-
-    // Realtime Buzz Event for ALL Players (1st, 2nd, 3rd...)
-    channel.on('broadcast', { event: 'player_buzz' }, (payload) => {
-      if (!payload?.payload) return;
-      const b: BuzzerEntry = payload.payload;
-
-      setLiveBuzzes((prev) => {
-        // Only prevent duplicate buzzes from the SAME player on the SAME question
-        if (prev.some((entry) => entry.playerName.toLowerCase() === b.playerName.toLowerCase())) return prev;
-        
-        const updated = [...prev, b].sort((x, y) => x.timestamp - y.timestamp);
-
-        const rank = updated.findIndex((e) => e.playerName.toLowerCase() === b.playerName.toLowerCase()) + 1;
-        channel.send({
-          type: 'broadcast',
-          event: 'buzz_ack',
-          payload: { playerName: b.playerName, rank },
-        });
-
-        return updated;
+      })
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          // Tell all phones the current question
+          channel.send({
+            type: 'broadcast',
+            event: 'question_change',
+            payload: { questionIndex: roundNumber - 1, questionId: question.id },
+          });
+          // Tell any non-joined phones that the game is locked
+          channel.send({
+            type: 'broadcast',
+            event: 'game_locked',
+            payload: {},
+          });
+        }
       });
-    });
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [sessionId, roundNumber, question.id, players, onPlayerJoined]);
+  }, [sessionId, roundNumber, question.id]);
 
   // Audio Play & Pause Control Handlers
   const handleReplayQuestionAudio = () => {

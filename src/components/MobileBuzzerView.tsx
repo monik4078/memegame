@@ -38,8 +38,15 @@ export const MobileBuzzerView: React.FC<MobileBuzzerViewProps> = ({
 
   const channelRef = useRef<any>(null);
   const joinTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isJoinedRef = useRef(isJoined);
+  const playerNameRef = useRef(playerName);
+  const hasAnnouncedRef = useRef(false);
 
-  // Connect to Supabase Realtime Channel for this session
+  // Keep refs in sync with state
+  useEffect(() => { isJoinedRef.current = isJoined; }, [isJoined]);
+  useEffect(() => { playerNameRef.current = playerName; }, [playerName]);
+
+  // Connect to Supabase Realtime Channel for this session (ONCE)
   useEffect(() => {
     if (!sessionCode) return;
 
@@ -69,39 +76,52 @@ export const MobileBuzzerView: React.FC<MobileBuzzerViewProps> = ({
           setSessionStatus(payload.payload.status);
         }
       })
+      .on('broadcast', { event: 'game_locked' }, () => {
+        // Host has started the game — block any new joins
+        if (!isJoinedRef.current) {
+          setErrorMsg('🔒 The game has already started. You can no longer join this session.');
+          setJoining(false);
+        }
+      })
       .on('broadcast', { event: 'buzz_ack' }, (payload) => {
         // Host acknowledged buzz rank
-        if (payload?.payload?.playerName?.toLowerCase() === playerName.trim().toLowerCase() && payload?.payload?.rank) {
+        if (payload?.payload?.playerName?.toLowerCase() === playerNameRef.current.trim().toLowerCase() && payload?.payload?.rank) {
           setBuzzRank(payload.payload.rank);
         }
       })
       .on('broadcast', { event: 'name_rejected' }, (payload) => {
-        // Host rejected duplicate name
-        if (payload?.payload?.playerName?.toLowerCase() === playerName.trim().toLowerCase()) {
+        // Host rejected duplicate name (or game locked)
+        if (payload?.payload?.playerName?.toLowerCase() === playerNameRef.current.trim().toLowerCase()) {
           if (joinTimeoutRef.current) { clearTimeout(joinTimeoutRef.current); joinTimeoutRef.current = null; }
           setJoining(false);
           setIsJoined(false);
           localStorage.removeItem(`gv_buzzer_name_${sessionCode.toUpperCase()}`);
-          setErrorMsg(`⚠️ Name "${playerName.trim()}" is already taken by another player. Please enter a different name.`);
+          const reason = payload?.payload?.reason;
+          if (reason === 'Game started') {
+            setErrorMsg('🔒 The game has already started. You can no longer join this session.');
+          } else {
+            setErrorMsg(`⚠️ Name "${playerNameRef.current.trim()}" is already taken by another player. Please enter a different name.`);
+          }
         }
       })
       .on('broadcast', { event: 'player_approved' }, (payload) => {
-        if (payload?.payload?.playerName?.toLowerCase() === playerName.trim().toLowerCase()) {
+        if (payload?.payload?.playerName?.toLowerCase() === playerNameRef.current.trim().toLowerCase()) {
           if (joinTimeoutRef.current) { clearTimeout(joinTimeoutRef.current); joinTimeoutRef.current = null; }
           setJoining(false);
           setIsJoined(true);
-          localStorage.setItem(`gv_buzzer_name_${sessionCode.toUpperCase()}`, playerName.trim());
+          localStorage.setItem(`gv_buzzer_name_${sessionCode.toUpperCase()}`, playerNameRef.current.trim());
         }
       })
       .subscribe((status) => {
         console.log(`[MobileBuzzer] Supabase channel status for ${channelName}:`, status);
-        // If already joined previously in localStorage, announce presence to main screen
-        if (status === 'SUBSCRIBED' && isJoined && playerName.trim()) {
+        // Only re-announce on INITIAL page load if already joined from localStorage (page refresh case)
+        if (status === 'SUBSCRIBED' && !hasAnnouncedRef.current && isJoinedRef.current && playerNameRef.current.trim()) {
+          hasAnnouncedRef.current = true;
           channel.send({
             type: 'broadcast',
-            event: 'player_join',
+            event: 'player_rejoin',
             payload: {
-              playerName: playerName.trim(),
+              playerName: playerNameRef.current.trim(),
               teamId: teamInfo.id,
               teamName: teamInfo.name,
               teamEmoji: teamInfo.emoji,
@@ -113,7 +133,7 @@ export const MobileBuzzerView: React.FC<MobileBuzzerViewProps> = ({
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [sessionCode, playerName, isJoined, teamInfo]);
+  }, [sessionCode, teamInfo]);
 
   const handleJoin = async (e: React.FormEvent) => {
     e.preventDefault();
