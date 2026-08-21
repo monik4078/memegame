@@ -880,7 +880,7 @@ const QuestionPreviewModal: React.FC<{ item: GameContent; onClose: () => void }>
   );
 };
 
-// ==================== ADMIN SCREEN WITH PERMISSION DENIED GRACEFUL FALLBACK ====================
+// ==================== ADMIN SCREEN ====================
 const AdminScreen: React.FC<{
   content: GameContent[];
   questionTypes: CustomQuestionType[];
@@ -900,7 +900,6 @@ const AdminScreen: React.FC<{
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
 
-  // Question Type Management Modal State
   const [showTypeModal, setShowTypeModal] = useState(false);
   const [typeForm, setTypeForm] = useState({ key: '', label: '', icon: '🎯', color: '#a855f7' });
   const [editingTypeKey, setEditingTypeKey] = useState<string | null>(null);
@@ -962,7 +961,6 @@ const AdminScreen: React.FC<{
 
   const showAlert = (title: string, message: string) => setAlertInfo({ open: true, title, message });
 
-  // RESTORED SEARCH FILTER
   const filtered = content.filter(c => {
     const matchType = filter === 'all' || c.type === filter;
     const matchSearch = !search ||
@@ -986,7 +984,6 @@ const AdminScreen: React.FC<{
     ));
   };
 
-  // Question Type CRUD Operations with Supabase Missing Table & Permission Fallback
   const handleSaveType = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!typeForm.label.trim()) {
@@ -1774,7 +1771,7 @@ const AdminScreen: React.FC<{
   );
 };
 
-// ==================== GAME SETUP WITH CLEAN VERCEL QR CODES ====================
+// ==================== GAME SETUP WITH REALTIME PLAYER JOIN & UNIQUE NAME CHECK ====================
 const GameSetup: React.FC<{
   questionTypes: CustomQuestionType[];
   onBack: () => void;
@@ -1795,6 +1792,53 @@ const GameSetup: React.FC<{
 
   const [sessionCode] = useState(() => generateSessionCode());
 
+  // Realtime Mobile Join Listener in Setup
+  useEffect(() => {
+    const channelName = `session_${sessionCode.toUpperCase()}`;
+    const channel = supabase.channel(channelName, { config: { broadcast: { ack: true } } });
+
+    channel.on('broadcast', { event: 'player_join' }, (payload) => {
+      if (!payload?.payload?.playerName) return;
+      const cleanName = payload.payload.playerName.trim();
+      const teamId = payload.payload.teamId;
+
+      setPlayers((prev) => {
+        // Enforce UNIQUE player names
+        const exists = prev.some(p => p.name.toLowerCase() === cleanName.toLowerCase());
+        if (exists) {
+          channel.send({
+            type: 'broadcast',
+            event: 'name_rejected',
+            payload: { playerName: cleanName, reason: 'Name taken' },
+          });
+          return prev;
+        }
+
+        channel.send({
+          type: 'broadcast',
+          event: 'player_approved',
+          payload: { playerName: cleanName },
+        });
+
+        return [...prev, {
+          id: Date.now().toString() + '_' + Math.random().toString(36).substring(2, 5),
+          name: cleanName,
+          score: 0,
+          teamId,
+          streak: 0,
+          bestStreak: 0,
+          correctAnswers: 0,
+          totalAnswers: 0,
+        }];
+      });
+    });
+
+    channel.subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [sessionCode]);
+
   const toggleCat = (typeKey: string) => {
     if (categories.includes(typeKey) && categories.length <= 1) return;
     setCategories(prev => prev.includes(typeKey) ? prev.filter(c => c !== typeKey) : [...prev, typeKey]);
@@ -1812,11 +1856,17 @@ const GameSetup: React.FC<{
 
   const addPlayer = () => {
     if (!newPlayerName.trim()) return;
+    const clean = newPlayerName.trim();
+    if (players.some(p => p.name.toLowerCase() === clean.toLowerCase())) {
+      setPlayerError(`Player name "${clean}" is already added!`);
+      return;
+    }
     setPlayers([...players, {
-      id: Date.now().toString(), name: newPlayerName.trim(), score: 0,
+      id: Date.now().toString(), name: clean, score: 0,
       streak: 0, bestStreak: 0, correctAnswers: 0, totalAnswers: 0,
     }]);
     setNewPlayerName('');
+    setPlayerError('');
   };
 
   const handleStart = () => {
@@ -1825,7 +1875,7 @@ const GameSetup: React.FC<{
 
     if (mode === 'individual' && newPlayerName.trim()) {
       const pName = newPlayerName.trim();
-      if (!currentPlayers.some(p => p.name === pName)) {
+      if (!currentPlayers.some(p => p.name.toLowerCase() === pName.toLowerCase())) {
         currentPlayers.push({
           id: Date.now().toString(),
           name: pName,
@@ -1840,7 +1890,7 @@ const GameSetup: React.FC<{
 
     if (mode === 'team' && newTeamName.trim()) {
       const tName = newTeamName.trim();
-      if (!currentTeams.some(t => t.name === tName)) {
+      if (!currentTeams.some(t => t.name.toLowerCase() === tName.toLowerCase())) {
         const idx = currentTeams.length;
         currentTeams.push({
           id: Date.now().toString(),
@@ -2010,16 +2060,32 @@ const GameSetup: React.FC<{
                 ⚠️ {playerError}
               </div>
             )}
-            <div className="space-y-2">
-              {players.map(p => (
-                <div key={p.id} className="flex items-center gap-3 p-3 rounded-xl bg-white/5 border border-white/5">
-                  <span>👤</span>
-                  <span className="font-medium flex-1">{p.name}</span>
-                  <button onClick={() => setPlayers(players.filter(pl => pl.id !== p.id))} className="text-white/30 hover:text-red-400 transition-colors">
-                    🗑️
-                  </button>
-                </div>
-              ))}
+
+            {/* LIVE CONNECTED PLAYERS LIST */}
+            <div className="mt-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold text-purple-300 uppercase tracking-wider">
+                  👥 Connected Players ({players.length})
+                </span>
+                <span className="text-[10px] text-white/40">Realtime Updates</span>
+              </div>
+              <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                {players.map(p => (
+                  <div key={p.id} className="flex items-center gap-3 p-3 rounded-xl bg-white/5 border border-white/10 animate-fadeIn">
+                    <span className="text-lg">👤</span>
+                    <span className="font-bold text-white flex-1">{p.name}</span>
+                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-green-500/20 text-green-300 font-semibold border border-green-500/30">
+                      Connected ✓
+                    </span>
+                    <button onClick={() => setPlayers(players.filter(pl => pl.id !== p.id))} className="text-white/30 hover:text-red-400 transition-colors p-1">
+                      🗑️
+                    </button>
+                  </div>
+                ))}
+                {players.length === 0 && (
+                  <p className="text-xs text-white/40 text-center py-4">No players connected yet. Scan QR code on mobile!</p>
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -2042,9 +2108,11 @@ const GameLobby: React.FC<{
   onBack: () => void;
   isDark: boolean;
   onToggleTheme: () => void;
-}> = ({ settings, onStart, onBack, isDark, onToggleTheme }) => {
+  onUpdatePlayers: (players: Player[]) => void;
+}> = ({ settings, onStart, onBack, isDark, onToggleTheme, onUpdatePlayers }) => {
   const [countdown, setCountdown] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
+  const [lobbyPlayers, setLobbyPlayers] = useState<Player[]>(settings.players || []);
 
   const handleStart = () => setCountdown(3);
 
@@ -2054,6 +2122,55 @@ const GameLobby: React.FC<{
     const t = setTimeout(() => setCountdown(countdown - 1), 1000);
     return () => clearTimeout(t);
   }, [countdown, onStart]);
+
+  // Realtime Player Join Listener in Lobby
+  useEffect(() => {
+    if (!settings.sessionId) return;
+    const channelName = `session_${settings.sessionId.toUpperCase()}`;
+    const channel = supabase.channel(channelName, { config: { broadcast: { ack: true } } });
+
+    channel.on('broadcast', { event: 'player_join' }, (payload) => {
+      if (!payload?.payload?.playerName) return;
+      const cleanName = payload.payload.playerName.trim();
+      const teamId = payload.payload.teamId;
+
+      setLobbyPlayers((prev) => {
+        const exists = prev.some(p => p.name.toLowerCase() === cleanName.toLowerCase());
+        if (exists) {
+          channel.send({
+            type: 'broadcast',
+            event: 'name_rejected',
+            payload: { playerName: cleanName, reason: 'Name taken' },
+          });
+          return prev;
+        }
+
+        channel.send({
+          type: 'broadcast',
+          event: 'player_approved',
+          payload: { playerName: cleanName },
+        });
+
+        const updated = [...prev, {
+          id: Date.now().toString() + '_' + Math.random().toString(36).substring(2, 5),
+          name: cleanName,
+          score: 0,
+          teamId,
+          streak: 0,
+          bestStreak: 0,
+          correctAnswers: 0,
+          totalAnswers: 0,
+        }];
+        onUpdatePlayers(updated);
+        return updated;
+      });
+    });
+
+    channel.subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [settings.sessionId, onUpdatePlayers]);
 
   const getQRScanUrl = (team?: Team) => {
     let base = window.location.origin;
@@ -2128,6 +2245,24 @@ const GameLobby: React.FC<{
               </button>
             </div>
           )}
+
+          {/* REALTIME JOINED PLAYERS IN LOBBY */}
+          <div className="mt-6 pt-4 border-t border-white/10 text-left">
+            <h4 className="text-xs font-bold text-purple-300 uppercase tracking-wider mb-2">
+              📱 Joined Players ({lobbyPlayers.length})
+            </h4>
+            <div className="flex flex-wrap gap-2">
+              {lobbyPlayers.map(p => (
+                <span key={p.id} className="px-3 py-1 rounded-full bg-purple-500/20 border border-purple-500/30 text-xs font-bold text-white animate-fadeIn flex items-center gap-1">
+                  <span>👤</span>
+                  <span>{p.name}</span>
+                </span>
+              ))}
+              {lobbyPlayers.length === 0 && (
+                <p className="text-xs text-white/40">Waiting for players to scan QR code...</p>
+              )}
+            </div>
+          </div>
         </div>
 
         <button className="w-full py-4 rounded-xl text-lg font-bold text-white flex items-center justify-center gap-3 transition-all active:scale-[0.98] cursor-pointer"
@@ -2154,7 +2289,8 @@ const GamePlay: React.FC<{
   teams: Team[];
   mode: GameMode;
   sessionId?: string;
-}> = ({ question, roundNumber, totalRounds, onNext, onExit, players, teams, mode, sessionId }) => {
+  onPlayerJoined: (player: Player) => void;
+}> = ({ question, roundNumber, totalRounds, onNext, onExit, players, teams, mode, sessionId, onPlayerJoined }) => {
   const [isRevealed, setIsRevealed] = useState(false);
   const [selectedWinnerId, setSelectedWinnerId] = useState<string | null>(null);
   const [showHint, setShowHint] = useState(false);
@@ -2231,15 +2367,50 @@ const GamePlay: React.FC<{
       }
     });
 
+    // Realtime Join Event in GamePlay
+    channel.on('broadcast', { event: 'player_join' }, (payload) => {
+      if (!payload?.payload?.playerName) return;
+      const cleanName = payload.payload.playerName.trim();
+      const teamId = payload.payload.teamId;
+
+      const exists = players.some(p => p.name.toLowerCase() === cleanName.toLowerCase());
+      if (exists) {
+        channel.send({
+          type: 'broadcast',
+          event: 'name_rejected',
+          payload: { playerName: cleanName, reason: 'Name taken' },
+        });
+      } else {
+        channel.send({
+          type: 'broadcast',
+          event: 'player_approved',
+          payload: { playerName: cleanName },
+        });
+        onPlayerJoined({
+          id: Date.now().toString() + '_' + Math.random().toString(36).substring(2, 5),
+          name: cleanName,
+          score: 0,
+          teamId,
+          streak: 0,
+          bestStreak: 0,
+          correctAnswers: 0,
+          totalAnswers: 0,
+        });
+      }
+    });
+
+    // Realtime Buzz Event for ALL Players (1st, 2nd, 3rd...)
     channel.on('broadcast', { event: 'player_buzz' }, (payload) => {
       if (!payload?.payload) return;
       const b: BuzzerEntry = payload.payload;
 
       setLiveBuzzes((prev) => {
-        if (prev.some((entry) => entry.playerName === b.playerName)) return prev;
+        // Only prevent duplicate buzzes from the SAME player on the SAME question
+        if (prev.some((entry) => entry.playerName.toLowerCase() === b.playerName.toLowerCase())) return prev;
+        
         const updated = [...prev, b].sort((x, y) => x.timestamp - y.timestamp);
 
-        const rank = updated.findIndex((e) => e.playerName === b.playerName) + 1;
+        const rank = updated.findIndex((e) => e.playerName.toLowerCase() === b.playerName.toLowerCase()) + 1;
         channel.send({
           type: 'broadcast',
           event: 'buzz_ack',
@@ -2253,7 +2424,7 @@ const GamePlay: React.FC<{
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [sessionId, roundNumber, question.id]);
+  }, [sessionId, roundNumber, question.id, players, onPlayerJoined]);
 
   // Audio Play & Pause Control Handlers
   const handleReplayQuestionAudio = () => {
@@ -2294,7 +2465,11 @@ const GamePlay: React.FC<{
 
   const progress = ((roundNumber - 1) / totalRounds) * 100;
   const isMC = question.questionType === 'multiple-choice';
-  const entities = mode === 'team' ? teams : players;
+
+  // Display ALL teams and individual players under "Who Answered Correctly?" so host can award points directly!
+  const displayEntities = mode === 'team'
+    ? [...teams, ...players.filter(p => !teams.some(t => t.id === p.teamId))]
+    : players;
 
   const playAnswerAudio = () => {
     const answerAudio = question.answerAudioData || question.answerAudioUrl;
@@ -2352,7 +2527,7 @@ const GamePlay: React.FC<{
           </div>
         </div>
 
-        {/* LIVE BUZZER ORDER DISPLAY */}
+        {/* LIVE BUZZER ORDER DISPLAY (1st, 2nd, 3rd...) */}
         {liveBuzzes.length > 0 && (
           <div className="mb-4 p-4 rounded-2xl bg-gradient-to-r from-red-500/20 via-purple-500/20 to-pink-500/20 border border-red-500/30 backdrop-blur-xl shadow-xl animate-fadeIn">
             <div className="flex items-center justify-between mb-2">
@@ -2409,7 +2584,6 @@ const GamePlay: React.FC<{
                       {audioPlaying ? 'Playing Question Audio' : audioPaused ? 'Question Audio Paused' : 'Question Audio Ready'}
                     </p>
 
-                    {/* PLAY, REPLAY & PAUSE AUDIO BUTTONS */}
                     <div className="flex items-center gap-2 flex-wrap justify-center">
                       <button
                         type="button"
@@ -2432,7 +2606,6 @@ const GamePlay: React.FC<{
                     </div>
                   </div>
 
-                  {/* Wave Visualizer */}
                   <div className="flex items-end justify-center gap-1.5 h-10 mt-1">
                     {waveHeights.map((h, idx) => (
                       <div key={idx} className="w-1.5 rounded-full bg-gradient-to-t from-cyan-400 to-purple-500 transition-all duration-150" style={{ height: `${h}px` }} />
@@ -2519,7 +2692,7 @@ const GamePlay: React.FC<{
                   <h3 className="text-sm font-bold text-center mb-1">Who Answered Correctly?</h3>
                   <p className="text-xs text-white/50 text-center mb-3">Select winner or "Nobody"</p>
 
-                  <div className="grid grid-cols-2 gap-2.5 mb-4">
+                  <div className="grid grid-cols-2 gap-2.5 mb-4 max-h-60 overflow-y-auto pr-1">
                     <button
                       type="button"
                       onClick={() => setSelectedWinnerId('nobody')}
@@ -2529,8 +2702,8 @@ const GamePlay: React.FC<{
                       <span className="text-xs font-semibold">Nobody</span>
                     </button>
 
-                    {entities.map(e => {
-                      const isTeam = mode === 'team';
+                    {displayEntities.map(e => {
+                      const isTeam = 'emoji' in e;
                       const isSelected = selectedWinnerId === e.id;
                       const emoji = isTeam ? (e as Team).emoji : '👤';
                       return (
@@ -2578,7 +2751,7 @@ const GamePlay: React.FC<{
                 </span>
               </div>
               <div className="space-y-2 max-h-[30vh] overflow-y-auto pr-1">
-                {entities.map(e => (
+                {(mode === 'team' ? teams : players).map(e => (
                   <div key={e.id} className="flex items-center justify-between p-2 rounded-xl bg-white/5 border border-white/5">
                     <div className="flex items-center gap-2 min-w-0">
                       <span className="text-base flex-shrink-0">
@@ -2856,8 +3029,8 @@ const Scoreboard: React.FC<{
       supabase
         .from('scoreboard')
         .select('*')
-        .gte('rounds', 10) // STRICT RULE: Minimum 10 questions required for Hall of Fame qualification!
-        .order('total_score', { ascending: false }) // ORDER BY WINNER'S HIGHEST SCORE DESCENDING!
+        .gte('rounds', 10)
+        .order('total_score', { ascending: false })
         .limit(20)
         .then(({ data, error }) => {
           setHofLoading(false);
@@ -2865,7 +3038,6 @@ const Scoreboard: React.FC<{
             console.error('[Hall of Fame] Fetch error:', error);
             setHofError(`Database error: ${error.message}`);
           } else {
-            // Guarantee Math-based ranking by highest winner score descending
             const sortedHof = (data || []).map(entry => {
               const results = entry.mode === 'team' ? (entry.team_results || []) : (entry.player_results || []);
               const calculatedWinnerScore = results.length > 0
@@ -2964,7 +3136,6 @@ const Scoreboard: React.FC<{
                 {sorted.map((item, idx) => {
                   const isTeam = 'emoji' in item;
                   const teamItem = item as Team;
-                  const playerItem = item as Player;
                   const itemColor = isTeam ? teamItem.color : '#a855f7';
                   const barPct = sorted[0]?.score ? (item.score / sorted[0].score) * 100 : 0;
                   const isWinner = idx === 0;
@@ -3058,7 +3229,6 @@ const Scoreboard: React.FC<{
                     const playerResults = entry.player_results || [];
                     const teamResults = entry.team_results || [];
                     const results = entry.mode === 'team' ? teamResults : playerResults;
-
                     const scoreToDisplay = entry.calculatedWinnerScore || entry.total_score;
 
                     return (
@@ -3077,7 +3247,6 @@ const Scoreboard: React.FC<{
                           </div>
                         </div>
 
-                        {/* Individual Player/Team Scores Breakdown */}
                         {results && results.length > 0 && (
                           <div className="pt-2 border-t border-white/5 flex items-center gap-1.5 flex-wrap">
                             {results.map((r: any, rIdx: number) => (
@@ -3313,9 +3482,7 @@ const App: React.FC = () => {
 
   const navigate = (s: GameScreen) => navigateToScreen(s);
 
-  // Save game results to Supabase scoreboard table with 10-Question Eligibility Enforcement
   const saveGameResults = async (players: Player[], teams: Team[], mode: GameMode, numRounds: number, totalScore: number, winnerName: string) => {
-    // 10-QUESTION ELIGIBILITY RULE
     if (numRounds < 10) {
       console.log(`[saveGameResults] Match ended with ${numRounds} questions. Minimum 10 questions required to qualify for Hall of Fame.`);
       return;
@@ -3328,7 +3495,7 @@ const App: React.FC = () => {
     const payload = {
       mode,
       rounds: numRounds,
-      total_score: winnerScore, // Winner highest score
+      total_score: winnerScore,
       winner_name: winnerName,
       player_results: mode === 'individual'
         ? players.map(p => ({ name: p.name, score: p.score, streak: p.streak, bestStreak: p.bestStreak, correctAnswers: p.correctAnswers, totalAnswers: p.totalAnswers }))
@@ -3426,7 +3593,17 @@ const App: React.FC = () => {
 
     if (winnerId !== 'nobody') {
       if (gameSettings.mode === 'team') {
-        updatedTeams = updatedTeams.map(t => t.id === winnerId ? { ...t, score: t.score + pts } : t);
+        // If winnerId matches a team directly
+        if (updatedTeams.some(t => t.id === winnerId)) {
+          updatedTeams = updatedTeams.map(t => t.id === winnerId ? { ...t, score: t.score + pts } : t);
+        } else {
+          // If winnerId belongs to an individual player in a team
+          const winnerPlayer = updatedPlayers.find(p => p.id === winnerId);
+          if (winnerPlayer && winnerPlayer.teamId) {
+            updatedTeams = updatedTeams.map(t => t.id === winnerPlayer.teamId ? { ...t, score: t.score + pts } : t);
+          }
+          updatedPlayers = updatedPlayers.map(p => p.id === winnerId ? { ...p, score: p.score + pts } : p);
+        }
       } else {
         updatedPlayers = updatedPlayers.map(p => p.id === winnerId ? { ...p, score: p.score + pts, correctAnswers: p.correctAnswers + 1, streak: p.streak + 1, bestStreak: Math.max(p.bestStreak, p.streak + 1) } : { ...p, streak: 0 });
       }
@@ -3591,7 +3768,16 @@ const App: React.FC = () => {
         adminEmail={adminEmail}
       />}
       {screen === 'setup' && <GameSetup questionTypes={questionTypes} onBack={() => navigate('home')} onStart={handleStartGame} isDark={isDark} onToggleTheme={toggleTheme} />}
-      {screen === 'lobby' && gameSettings && <GameLobby settings={gameSettings} onStart={() => navigateToScreen('playing')} onBack={() => navigate('setup')} isDark={isDark} onToggleTheme={toggleTheme} />}
+      {screen === 'lobby' && gameSettings && (
+        <GameLobby
+          settings={gameSettings}
+          onStart={() => navigateToScreen('playing')}
+          onBack={() => navigate('setup')}
+          isDark={isDark}
+          onToggleTheme={toggleTheme}
+          onUpdatePlayers={(updated) => setGameState(prev => ({ ...prev, players: updated }))}
+        />
+      )}
       {screen === 'playing' && gameState.currentQuestion && (
         <GamePlay
           question={gameState.currentQuestion}
@@ -3603,6 +3789,12 @@ const App: React.FC = () => {
           teams={gameState.teams}
           mode={gameSettings?.mode || 'individual'}
           sessionId={gameSettings?.sessionId}
+          onPlayerJoined={(newPlayer) => {
+            setGameState(prev => ({
+              ...prev,
+              players: [...prev.players.filter(p => p.name.toLowerCase() !== newPlayer.name.toLowerCase()), newPlayer]
+            }));
+          }}
         />
       )}
       {screen === 'scoreboard' && (

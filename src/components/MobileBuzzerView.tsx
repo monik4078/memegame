@@ -16,10 +16,10 @@ export const MobileBuzzerView: React.FC<MobileBuzzerViewProps> = ({
   teamEmojiFromUrl,
 }) => {
   const [playerName, setPlayerName] = useState(() => {
-    return localStorage.getItem('gv_buzzer_player_name') || '';
+    return localStorage.getItem(`gv_buzzer_name_${sessionCode.toUpperCase()}`) || '';
   });
   const [isJoined, setIsJoined] = useState(() => {
-    return !!localStorage.getItem('gv_buzzer_player_name');
+    return !!localStorage.getItem(`gv_buzzer_name_${sessionCode.toUpperCase()}`);
   });
 
   const [sessionStatus, setSessionStatus] = useState<'playing' | 'lobby' | 'ended'>('playing');
@@ -28,7 +28,9 @@ export const MobileBuzzerView: React.FC<MobileBuzzerViewProps> = ({
   const [buzzRank, setBuzzRank] = useState<number | null>(null);
   const [buzzTime, setBuzzTime] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [teamInfo, setTeamInfo] = useState<{ id?: string; name?: string; emoji?: string }>({
+  const [joining, setJoining] = useState(false);
+
+  const [teamInfo] = useState<{ id?: string; name?: string; emoji?: string }>({
     id: teamIdFromUrl,
     name: teamNameFromUrl,
     emoji: teamEmojiFromUrl,
@@ -68,28 +70,88 @@ export const MobileBuzzerView: React.FC<MobileBuzzerViewProps> = ({
       })
       .on('broadcast', { event: 'buzz_ack' }, (payload) => {
         // Host acknowledged buzz rank
-        if (payload?.payload?.playerName === playerName && payload?.payload?.rank) {
+        if (payload?.payload?.playerName?.toLowerCase() === playerName.trim().toLowerCase() && payload?.payload?.rank) {
           setBuzzRank(payload.payload.rank);
+        }
+      })
+      .on('broadcast', { event: 'name_rejected' }, (payload) => {
+        // Host rejected duplicate name
+        if (payload?.payload?.playerName?.toLowerCase() === playerName.trim().toLowerCase()) {
+          setJoining(false);
+          setIsJoined(false);
+          localStorage.removeItem(`gv_buzzer_name_${sessionCode.toUpperCase()}`);
+          setErrorMsg(`⚠️ Name "${playerName.trim()}" is already taken by another player. Please enter a different name.`);
+        }
+      })
+      .on('broadcast', { event: 'player_approved' }, (payload) => {
+        if (payload?.payload?.playerName?.toLowerCase() === playerName.trim().toLowerCase()) {
+          setJoining(false);
+          setIsJoined(true);
+          localStorage.setItem(`gv_buzzer_name_${sessionCode.toUpperCase()}`, playerName.trim());
         }
       })
       .subscribe((status) => {
         console.log(`[MobileBuzzer] Supabase channel status for ${channelName}:`, status);
+        // If already joined previously in localStorage, announce presence to main screen
+        if (status === 'SUBSCRIBED' && isJoined && playerName.trim()) {
+          channel.send({
+            type: 'broadcast',
+            event: 'player_join',
+            payload: {
+              playerName: playerName.trim(),
+              teamId: teamInfo.id,
+              teamName: teamInfo.name,
+              teamEmoji: teamInfo.emoji,
+            },
+          });
+        }
       });
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [sessionCode, playerName]);
+  }, [sessionCode, playerName, isJoined, teamInfo]);
 
-  const handleJoin = (e: React.FormEvent) => {
+  const handleJoin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!playerName.trim()) {
+    const cleanName = playerName.trim();
+    if (!cleanName) {
       setErrorMsg('Please enter your name to continue.');
       return;
     }
     setErrorMsg(null);
-    localStorage.setItem('gv_buzzer_player_name', playerName.trim());
-    setIsJoined(true);
+    setJoining(true);
+
+    if (channelRef.current) {
+      try {
+        await channelRef.current.send({
+          type: 'broadcast',
+          event: 'player_join',
+          payload: {
+            playerName: cleanName,
+            teamId: teamInfo.id,
+            teamName: teamInfo.name,
+            teamEmoji: teamInfo.emoji,
+          },
+        });
+
+        // Fallback approve if host is not active or offline
+        setTimeout(() => {
+          setJoining(false);
+          setIsJoined(true);
+          localStorage.setItem(`gv_buzzer_name_${sessionCode.toUpperCase()}`, cleanName);
+        }, 1200);
+      } catch (err) {
+        console.error('Error sending join signal:', err);
+        setJoining(false);
+        setIsJoined(true);
+        localStorage.setItem(`gv_buzzer_name_${sessionCode.toUpperCase()}`, cleanName);
+      }
+    } else {
+      setJoining(false);
+      setIsJoined(true);
+      localStorage.setItem(`gv_buzzer_name_${sessionCode.toUpperCase()}`, cleanName);
+    }
   };
 
   const handleBuzz = async () => {
@@ -121,13 +183,6 @@ export const MobileBuzzerView: React.FC<MobileBuzzerViewProps> = ({
         console.error('Error sending buzz signal:', err);
       }
     }
-  };
-
-  const resetPlayerName = () => {
-    localStorage.removeItem('gv_buzzer_player_name');
-    setIsJoined(false);
-    setHasBuzzed(false);
-    setBuzzRank(null);
   };
 
   return (
@@ -175,12 +230,12 @@ export const MobileBuzzerView: React.FC<MobileBuzzerViewProps> = ({
             <div className="text-center">
               <div className="text-4xl mb-2">👋</div>
               <h2 className="text-xl font-bold text-white">Join Game Session</h2>
-              <p className="text-xs text-white/50 mt-1">Enter your name to use your phone as a live buzzer!</p>
+              <p className="text-xs text-white/50 mt-1">Enter your name to connect your phone as a live buzzer!</p>
             </div>
 
             {errorMsg && (
-              <div className="p-3 rounded-xl bg-red-500/20 border border-red-500/30 text-red-300 text-xs text-center font-semibold">
-                ⚠️ {errorMsg}
+              <div className="p-3 rounded-xl bg-red-500/20 border border-red-500/30 text-red-300 text-xs text-center font-semibold animate-shake">
+                {errorMsg}
               </div>
             )}
 
@@ -189,6 +244,7 @@ export const MobileBuzzerView: React.FC<MobileBuzzerViewProps> = ({
               <input
                 type="text"
                 required
+                disabled={joining}
                 maxLength={20}
                 value={playerName}
                 onChange={(e) => setPlayerName(e.target.value)}
@@ -199,10 +255,11 @@ export const MobileBuzzerView: React.FC<MobileBuzzerViewProps> = ({
 
             <button
               type="submit"
-              className="w-full py-4 rounded-2xl font-black text-white text-base transition-all active:scale-[0.98] shadow-lg cursor-pointer"
+              disabled={joining || !playerName.trim()}
+              className="w-full py-4 rounded-2xl font-black text-white text-base transition-all active:scale-[0.98] shadow-lg cursor-pointer disabled:opacity-50"
               style={{ background: 'linear-gradient(135deg, #a855f7, #ec4899)', boxShadow: '0 8px 25px rgba(168,85,247,0.4)' }}
             >
-              Enter Game 🚀
+              {joining ? 'Connecting to Session...' : 'Enter Game 🚀'}
             </button>
           </form>
         ) : sessionStatus === 'ended' ? (
@@ -218,19 +275,15 @@ export const MobileBuzzerView: React.FC<MobileBuzzerViewProps> = ({
             </div>
           </div>
         ) : (
-          /* Step 2: The Buzzer Screen */
+          /* Step 2: The Buzzer Screen with PERMANENT NAME LOCK */
           <div className="w-full flex flex-col items-center gap-6 animate-fadeIn">
-            {/* Player Info Badge */}
-            <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 text-xs">
-              <span className="text-white/50">Playing as:</span>
-              <span className="font-bold text-white">{playerName}</span>
-              <button
-                type="button"
-                onClick={resetPlayerName}
-                className="ml-2 text-white/40 hover:text-white/80 underline text-[11px]"
-              >
-                Change
-              </button>
+            {/* Permanent Locked Player Name Badge */}
+            <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-purple-500/20 border border-purple-500/40 text-xs shadow-md">
+              <span className="text-purple-300 font-medium">Playing as:</span>
+              <span className="font-extrabold text-white">{playerName}</span>
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-500/30 text-purple-200 font-semibold border border-purple-400/30">
+                Locked 🔒
+              </span>
             </div>
 
             {/* Giant BUZZER Button */}
@@ -271,7 +324,7 @@ export const MobileBuzzerView: React.FC<MobileBuzzerViewProps> = ({
             <div className="text-center space-y-1">
               {hasBuzzed ? (
                 <div className="p-3 rounded-2xl bg-green-500/10 border border-green-500/20 text-green-300 text-xs font-semibold max-w-xs">
-                  ✅ Buzzer pressed for this question! Cannot press again until next question.
+                  ✅ Buzzer pressed for this question! Locked until next question.
                 </div>
               ) : (
                 <p className="text-xs text-white/50 font-medium">
@@ -285,7 +338,7 @@ export const MobileBuzzerView: React.FC<MobileBuzzerViewProps> = ({
 
       {/* Footer */}
       <div className="w-full max-w-md mx-auto text-center pb-2 text-[11px] text-white/30 relative z-10">
-        Guess What? Live Phone Buzzer • ID: {sessionCode}
+        Guess What? Live Phone Buzzer • Session: {sessionCode}
       </div>
     </div>
   );
