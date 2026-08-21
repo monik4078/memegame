@@ -37,6 +37,7 @@ export const MobileBuzzerView: React.FC<MobileBuzzerViewProps> = ({
   });
 
   const channelRef = useRef<any>(null);
+  const joinTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Connect to Supabase Realtime Channel for this session
   useEffect(() => {
@@ -77,6 +78,7 @@ export const MobileBuzzerView: React.FC<MobileBuzzerViewProps> = ({
       .on('broadcast', { event: 'name_rejected' }, (payload) => {
         // Host rejected duplicate name
         if (payload?.payload?.playerName?.toLowerCase() === playerName.trim().toLowerCase()) {
+          if (joinTimeoutRef.current) { clearTimeout(joinTimeoutRef.current); joinTimeoutRef.current = null; }
           setJoining(false);
           setIsJoined(false);
           localStorage.removeItem(`gv_buzzer_name_${sessionCode.toUpperCase()}`);
@@ -85,6 +87,7 @@ export const MobileBuzzerView: React.FC<MobileBuzzerViewProps> = ({
       })
       .on('broadcast', { event: 'player_approved' }, (payload) => {
         if (payload?.payload?.playerName?.toLowerCase() === playerName.trim().toLowerCase()) {
+          if (joinTimeoutRef.current) { clearTimeout(joinTimeoutRef.current); joinTimeoutRef.current = null; }
           setJoining(false);
           setIsJoined(true);
           localStorage.setItem(`gv_buzzer_name_${sessionCode.toUpperCase()}`, playerName.trim());
@@ -122,6 +125,12 @@ export const MobileBuzzerView: React.FC<MobileBuzzerViewProps> = ({
     setErrorMsg(null);
     setJoining(true);
 
+    // Clear any previous join timeout
+    if (joinTimeoutRef.current) {
+      clearTimeout(joinTimeoutRef.current);
+      joinTimeoutRef.current = null;
+    }
+
     if (channelRef.current) {
       try {
         await channelRef.current.send({
@@ -135,22 +144,25 @@ export const MobileBuzzerView: React.FC<MobileBuzzerViewProps> = ({
           },
         });
 
-        // Fallback approve if host is not active or offline
-        setTimeout(() => {
-          setJoining(false);
-          setIsJoined(true);
-          localStorage.setItem(`gv_buzzer_name_${sessionCode.toUpperCase()}`, cleanName);
-        }, 1200);
+        // Wait for host to approve or reject (up to 10 seconds).
+        // If no response, show a message asking to try again.
+        joinTimeoutRef.current = setTimeout(() => {
+          // Only fire if still in joining state (not yet approved/rejected)
+          setJoining((prev) => {
+            if (prev) {
+              setErrorMsg('⏳ No response from the game host. Make sure the host has the game lobby or game screen open, then try again.');
+            }
+            return false;
+          });
+        }, 10000);
       } catch (err) {
         console.error('Error sending join signal:', err);
         setJoining(false);
-        setIsJoined(true);
-        localStorage.setItem(`gv_buzzer_name_${sessionCode.toUpperCase()}`, cleanName);
+        setErrorMsg('❌ Could not connect to the game session. Please check your internet connection and try again.');
       }
     } else {
       setJoining(false);
-      setIsJoined(true);
-      localStorage.setItem(`gv_buzzer_name_${sessionCode.toUpperCase()}`, cleanName);
+      setErrorMsg('❌ Not connected to the game session channel. Please refresh the page and try again.');
     }
   };
 
