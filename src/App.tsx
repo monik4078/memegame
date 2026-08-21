@@ -880,6 +880,136 @@ const QuestionPreviewModal: React.FC<{ item: GameContent; onClose: () => void }>
   );
 };
 
+// Preset suggested questions for quick-fill in content creator
+const PRESET_QUESTION_SUGGESTIONS: Record<string, Array<{
+  question: string;
+  answer: string;
+  options?: string[];
+  questionType?: QuestionType;
+  difficulty?: 'easy' | 'medium' | 'hard';
+  points?: number;
+  movie?: string;
+  audioHint?: string;
+}>> = {
+  'meme-dialogue': [
+    {
+      question: 'What is the famous dialogue from this dog sitting in a burning room meme?',
+      answer: 'This is fine',
+      options: ['This is fine', 'Everything is okay', "I'm on fire", 'No worries'],
+      questionType: 'multiple-choice',
+      difficulty: 'easy',
+      points: 10,
+    },
+    {
+      question: 'Complete the legendary meme line: "One does not simply ___"',
+      answer: 'Walk into Mordor',
+      options: ['Walk into Mordor', 'Eat just one chip', 'Win at poker', 'Ignore this meme'],
+      questionType: 'multiple-choice',
+      difficulty: 'easy',
+      points: 10,
+      movie: 'Lord of the Rings',
+    },
+    {
+      question: 'What phrase is associated with the guy standing in front of a stock market chart meme?',
+      answer: 'Stonks',
+      options: ['Stonks', 'To the Moon', 'Buy High Sell Low', 'Diamond Hands'],
+      questionType: 'multiple-choice',
+      difficulty: 'easy',
+      points: 10,
+    },
+    {
+      question: 'The "Distracted Boyfriend" meme represents which concept?',
+      answer: 'Temptation — Choosing something new over what you already have',
+      options: ['Temptation — Choosing something new over what you already have', 'Getting lost in public', 'Shopping addiction', 'Bad camera angles'],
+      questionType: 'multiple-choice',
+      difficulty: 'medium',
+      points: 20,
+    },
+    {
+      question: 'What action is Drake performing in the top panel of his famous 2-panel meme?',
+      answer: 'Disapproving / Rejecting something',
+      options: ['Disapproving / Rejecting something', 'Dancing', 'Sleeping', 'Pointing excitedly'],
+      questionType: 'multiple-choice',
+      difficulty: 'easy',
+      points: 10,
+    },
+  ],
+  'song-tune': [
+    {
+      question: '🎵 Identify this classic Bollywood romantic anthem: "Tum hi ho, ab tum hi ho..."',
+      answer: 'Tum Hi Ho (Aashiqui 2)',
+      options: ['Tum Hi Ho (Aashiqui 2)', 'Channa Mereya', 'Kal Ho Naa Ho', 'Tujhe Dekha Toh'],
+      questionType: 'multiple-choice',
+      difficulty: 'medium',
+      points: 20,
+      audioHint: 'Slow romantic Bollywood hit tune',
+    },
+    {
+      question: '🎵 "Never gonna give you up, never gonna let you down..." — What internet prank song is this?',
+      answer: 'Rickrolling',
+      options: ['Rickrolling', 'Trolling', 'Catfishing', 'Clickbaiting'],
+      questionType: 'multiple-choice',
+      difficulty: 'easy',
+      points: 10,
+      audioHint: 'Rick Astley famous internet prank song',
+    },
+    {
+      question: '🎵 "Na na na na, na na na na, hey hey hey, goodbye!" — Identify this anthem',
+      answer: 'Na Na Hey Hey Kiss Him Goodbye',
+      options: ['Na Na Hey Hey Kiss Him Goodbye', 'Celebration', 'We Will Rock You', 'Seven Nation Army'],
+      questionType: 'multiple-choice',
+      difficulty: 'medium',
+      points: 20,
+    },
+    {
+      question: '🎵 "Baby Shark doo doo doo..." — Which viral kids song is this?',
+      answer: "Baby Shark (Pinkfong)",
+      options: ["Baby Shark (Pinkfong)", 'Gangnam Style', 'Despacito', 'CoComelon Song'],
+      questionType: 'multiple-choice',
+      difficulty: 'easy',
+      points: 10,
+    },
+  ],
+  'movie-meme': [
+    {
+      question: 'Which Marvel character only speaks the words "I am Groot"?',
+      answer: 'Guardians of the Galaxy',
+      options: ['Guardians of the Galaxy', 'Avengers: Endgame', 'Thor: Ragnarok', 'Spider-Man'],
+      questionType: 'multiple-choice',
+      difficulty: 'easy',
+      points: 10,
+      movie: 'Marvel',
+    },
+    {
+      question: 'Which iconic film quote is associated with Darth Vader revealing his secret to Luke?',
+      answer: 'No, I am your father',
+      options: ['No, I am your father', 'Luke, I am your father', 'May the Force be with you', 'I have the high ground'],
+      questionType: 'multiple-choice',
+      difficulty: 'easy',
+      points: 10,
+      movie: 'Star Wars',
+    },
+    {
+      question: 'The "Leonardo DiCaprio pointing at TV screen holding a drink" meme is from which film?',
+      answer: 'Once Upon a Time in Hollywood',
+      options: ['Once Upon a Time in Hollywood', 'The Wolf of Wall Street', 'Inception', 'Django Unchained'],
+      questionType: 'multiple-choice',
+      difficulty: 'hard',
+      points: 30,
+      movie: 'Once Upon a Time in Hollywood',
+    },
+    {
+      question: 'In Morpheus\'s meme: "What if I told you...", which two pill options did he present?',
+      answer: 'Red Pill & Blue Pill',
+      options: ['Red Pill & Blue Pill', 'Green Pill & Yellow Pill', 'Black Pill & White Pill', 'Purple Pill & Orange Pill'],
+      questionType: 'multiple-choice',
+      difficulty: 'medium',
+      points: 20,
+      movie: 'The Matrix',
+    },
+  ],
+};
+
 // ==================== ADMIN SCREEN ====================
 const AdminScreen: React.FC<{
   content: GameContent[];
@@ -899,6 +1029,9 @@ const AdminScreen: React.FC<{
   const [search, setSearch] = useState('');
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
+
+  const [showMovieDropdown, setShowMovieDropdown] = useState(false);
+  const [showQuestionSuggestions, setShowQuestionSuggestions] = useState(false);
 
   const [showTypeModal, setShowTypeModal] = useState(false);
   const [typeForm, setTypeForm] = useState({ key: '', label: '', icon: '🎯', color: '#a855f7' });
@@ -1502,9 +1635,96 @@ const AdminScreen: React.FC<{
                   </div>
                 </div>
 
-                <div>
-                  <label className="text-sm text-white/60 mb-1.5 block">Question</label>
-                  <textarea className="w-full rounded-xl px-4 py-3 text-white outline-none text-sm" rows={2} style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }} placeholder="Enter question..." value={form.question} onChange={e => setForm({ ...form, question: e.target.value })} />
+                {/* Question Input with Suggested Questions Picker */}
+                <div className="relative">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-sm text-white/60 block">Question</label>
+                    <button
+                      type="button"
+                      onClick={() => setShowQuestionSuggestions(!showQuestionSuggestions)}
+                      className="text-xs font-semibold text-pink-400 hover:text-pink-300 flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-pink-500/10 border border-pink-500/20 transition-all cursor-pointer"
+                    >
+                      <span>💡</span> Suggested Questions
+                    </button>
+                  </div>
+                  
+                  <textarea
+                    className="w-full rounded-xl px-4 py-3 text-white outline-none text-sm"
+                    rows={2}
+                    style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}
+                    placeholder="Enter question or pick from suggested questions..."
+                    value={form.question}
+                    onChange={e => setForm({ ...form, question: e.target.value })}
+                  />
+
+                  {/* Suggested Questions Dropdown Overlay */}
+                  {showQuestionSuggestions && (
+                    <div
+                      className="absolute right-0 top-full mt-1.5 z-50 w-full sm:w-[420px] rounded-2xl overflow-hidden shadow-2xl border border-pink-500/30 max-h-72 overflow-y-auto"
+                      style={{ background: 'rgba(18, 18, 42, 0.98)', backdropFilter: 'blur(16px)' }}
+                    >
+                      <div className="p-3 border-b border-white/10 text-xs font-bold text-pink-300 flex items-center justify-between bg-white/5">
+                        <span>💡 Choose a Suggested Question</span>
+                        <button type="button" onClick={() => setShowQuestionSuggestions(false)} className="text-white/40 hover:text-white text-xs">✕ Close</button>
+                      </div>
+                      
+                      {/* Presets */}
+                      {(PRESET_QUESTION_SUGGESTIONS[form.type] || PRESET_QUESTION_SUGGESTIONS['meme-dialogue'] || []).map((sug, idx) => (
+                        <div
+                          key={'preset_' + idx}
+                          onClick={() => {
+                            setForm(f => ({
+                              ...f,
+                              question: sug.question,
+                              answer: sug.answer,
+                              options: sug.options && sug.options.length ? sug.options : f.options,
+                              questionType: sug.questionType || f.questionType,
+                              difficulty: sug.difficulty || f.difficulty,
+                              points: sug.points || f.points,
+                              movie: sug.movie || f.movie,
+                              audioHint: sug.audioHint || f.audioHint,
+                            }));
+                            setShowQuestionSuggestions(false);
+                          }}
+                          className="p-3 hover:bg-pink-500/20 cursor-pointer border-b border-white/5 transition-colors group"
+                        >
+                          <div className="text-xs font-semibold text-white group-hover:text-pink-200 mb-1">{sug.question}</div>
+                          <div className="flex items-center justify-between text-[11px] text-white/50">
+                            <span>Ans: <strong className="text-green-400">{sug.answer}</strong></span>
+                            <span className="px-2 py-0.5 rounded bg-white/10 text-[10px] text-purple-300">{sug.difficulty || 'medium'} • {sug.points || 20} pts</span>
+                          </div>
+                        </div>
+                      ))}
+
+                      {/* Existing DB Questions as Suggestions */}
+                      {content.filter(c => c.type === form.type && c.question !== form.question).slice(0, 5).map((dbSug) => (
+                        <div
+                          key={'dbsug_' + dbSug.id}
+                          onClick={() => {
+                            setForm(f => ({
+                              ...f,
+                              question: dbSug.question,
+                              answer: dbSug.answer,
+                              options: dbSug.options && dbSug.options.length ? dbSug.options : f.options,
+                              questionType: dbSug.questionType || f.questionType,
+                              difficulty: dbSug.difficulty || f.difficulty,
+                              points: dbSug.points || f.points,
+                              movie: dbSug.movie || f.movie,
+                              audioHint: dbSug.audioHint || f.audioHint,
+                            }));
+                            setShowQuestionSuggestions(false);
+                          }}
+                          className="p-3 hover:bg-purple-500/20 cursor-pointer border-b border-white/5 transition-colors group"
+                        >
+                          <div className="text-xs font-medium text-white/80 group-hover:text-purple-200 mb-1">{dbSug.question}</div>
+                          <div className="flex items-center justify-between text-[11px] text-white/40">
+                            <span>Ans: <strong className="text-green-400/90">{dbSug.answer}</strong></span>
+                            <span className="text-[10px] text-white/30">(Existing content)</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <div>
@@ -1512,15 +1732,79 @@ const AdminScreen: React.FC<{
                   <input className="w-full rounded-xl px-4 py-3 text-white outline-none text-sm" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }} placeholder="The correct answer" value={form.answer} onChange={e => setForm({ ...form, answer: e.target.value })} />
                 </div>
 
-                <div>
-                  <label className="text-sm text-white/60 mb-1 block">Movie / Folder Name</label>
-                  <input
-                    className="w-full rounded-xl px-4 py-3 text-white outline-none text-sm"
-                    style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}
-                    placeholder="Type folder name, or leave blank for Independent Content"
-                    value={form.movie || ''}
-                    onChange={e => setForm({ ...form, movie: e.target.value })}
-                  />
+                {/* Movie / Folder Name Input with Autocomplete Suggestions Dropdown */}
+                <div className="relative">
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-sm text-white/60 block">Movie / Folder Name</label>
+                    {availableFolders.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setShowMovieDropdown(!showMovieDropdown)}
+                        className="text-xs text-purple-400 hover:text-purple-300 cursor-pointer font-medium"
+                      >
+                        {showMovieDropdown ? 'Hide Suggestions' : '💡 Select Existing Movie'}
+                      </button>
+                    )}
+                  </div>
+                  
+                  <div className="relative">
+                    <input
+                      className="w-full rounded-xl px-4 py-3 text-white outline-none text-sm pr-10"
+                      style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}
+                      placeholder="Type movie name (e.g. Marvel, Bollywood, Shrek) or pick from suggestions"
+                      value={form.movie || ''}
+                      onFocus={() => setShowMovieDropdown(true)}
+                      onChange={e => {
+                        setForm({ ...form, movie: e.target.value });
+                        setShowMovieDropdown(true);
+                      }}
+                    />
+                    {form.movie && (
+                      <button
+                        type="button"
+                        onClick={() => setForm({ ...form, movie: '' })}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white text-xs p-1"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Autocomplete Suggestions Dropdown Overlay */}
+                  {showMovieDropdown && availableFolders.length > 0 && (
+                    <div
+                      className="absolute left-0 right-0 top-full mt-1.5 z-50 rounded-xl overflow-hidden shadow-2xl border border-purple-500/30 max-h-48 overflow-y-auto"
+                      style={{ background: 'rgba(18, 18, 42, 0.98)', backdropFilter: 'blur(16px)' }}
+                    >
+                      <div className="p-2.5 border-b border-white/10 text-[11px] font-semibold text-purple-300 uppercase tracking-wider flex justify-between items-center bg-white/5">
+                        <span>Suggested Movies ({availableFolders.filter(m => !form.movie || m.toLowerCase().includes(form.movie.toLowerCase())).length})</span>
+                        <button type="button" onClick={() => setShowMovieDropdown(false)} className="text-white/40 hover:text-white">Close</button>
+                      </div>
+                      {availableFolders
+                        .filter(m => !form.movie || m.toLowerCase().includes((form.movie || '').toLowerCase()))
+                        .map(folderName => (
+                          <div
+                            key={folderName}
+                            onClick={() => {
+                              setForm({ ...form, movie: folderName });
+                              setShowMovieDropdown(false);
+                            }}
+                            className="px-4 py-2.5 text-sm text-white/90 hover:bg-purple-500/20 cursor-pointer flex items-center justify-between border-b border-white/5 last:border-0 transition-colors"
+                          >
+                            <span className="flex items-center gap-2">
+                              <span>🎬</span>
+                              <span className="font-medium">{folderName}</span>
+                            </span>
+                            <span className="text-xs text-white/40">
+                              {content.filter(c => c.movie?.trim() === folderName).length} items
+                            </span>
+                          </div>
+                        ))}
+                      {availableFolders.filter(m => !form.movie || m.toLowerCase().includes((form.movie || '').toLowerCase())).length === 0 && (
+                        <div className="p-3 text-xs text-white/40 text-center">No matching existing movies. A new movie folder will be created: "{form.movie}"</div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {form.questionType === 'multiple-choice' && (
