@@ -1,23 +1,40 @@
 // Content item types
-export type ContentType = 'meme-dialogue' | 'song-tune' | 'movie-meme';
+export type ContentType = 'meme-dialogue' | 'song-tune' | 'movie-meme' | string;
+
+export interface CustomQuestionType {
+  id: string;
+  key: string;
+  label: string;
+  icon?: string;
+  color: string;
+  isSystem?: boolean;
+}
 
 export interface GameContent {
   id: string;
   type: ContentType;
+  questionType?: 'multiple-choice' | 'open-ended';
   question: string;
   answer: string;
-  options: string[]; // multiple choice options including answer
-  imageUrl?: string;  // for meme images
-  audioHint?: string; // description for song tune
+  options?: string[];
+  imageUrl?: string;
+  imageData?: string;
+  videoUrl?: string;
+  videoData?: string;
+  audioUrl?: string;
+  audioData?: string;
+  audioHint?: string;
+  answerAudioUrl?: string;
+  answerAudioData?: string;
   difficulty: 'easy' | 'medium' | 'hard';
   points: number;
-  createdAt: number;
+  createdAt?: number;
   movie?: string;
 }
 
 // Game modes
 export type GameMode = 'individual' | 'team';
-export type GameScreen = 'home' | 'admin' | 'setup' | 'lobby' | 'playing' | 'reveal' | 'scoreboard';
+export type GameScreen = 'loading' | 'home' | 'admin' | 'admin-login' | 'setup' | 'lobby' | 'playing' | 'reveal' | 'scoreboard' | 'buzzer';
 
 // Team
 export interface Team {
@@ -49,6 +66,28 @@ export interface GameSettings {
   contentTypes: ContentType[];
   timePerQuestion: number;
   selectedContentIds: string[];
+  sessionId?: string;
+}
+
+// Real-time Buzzer Press Entry
+export interface BuzzerEntry {
+  id: string;
+  playerId: string;
+  playerName: string;
+  teamId?: string;
+  teamName?: string;
+  teamEmoji?: string;
+  timestamp: number;
+  questionIndex: number;
+}
+
+// Game Session
+export interface GameSession {
+  id: string;
+  code: string; // e.g. "GV-8391"
+  status: 'lobby' | 'playing' | 'ended';
+  mode: GameMode;
+  currentQuestionIndex: number;
 }
 
 // Current question state
@@ -73,7 +112,7 @@ export interface GameState {
 // Admin stats
 export interface AdminStats {
   totalContent: number;
-  byType: { memeDialogue: number; songTune: number; movieMeme: number };
+  byType: Record<string, number>;
   totalGamesPlayed: number;
   lastPlayed: string | null;
 }

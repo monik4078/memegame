@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabaseClient';
 import logoImg from '../Logo/logo.png';
+import { getQRCodeUrl } from './utils/qr';
+import { MobileBuzzerView } from './components/MobileBuzzerView';
 import {
   ArrowLeft,
   Edit3,
@@ -26,13 +28,19 @@ import {
   X,
   Eye,
   Volume2,
+  QrCode,
+  Sparkles,
+  Settings2,
+  CheckCircle,
+  Copy,
+  Check,
 } from 'lucide-react';
-
+import type { CustomQuestionType, BuzzerEntry } from './types';
 
 // ==================== TYPES ====================
-type ContentType = 'meme-dialogue' | 'song-tune' | 'movie-meme';
+type ContentType = 'meme-dialogue' | 'song-tune' | 'movie-meme' | string;
 type GameMode = 'individual' | 'team';
-type GameScreen = 'loading' | 'home' | 'admin' | 'admin-login' | 'setup' | 'lobby' | 'playing' | 'reveal' | 'scoreboard';
+type GameScreen = 'loading' | 'home' | 'admin' | 'admin-login' | 'setup' | 'lobby' | 'playing' | 'reveal' | 'scoreboard' | 'buzzer';
 type QuestionType = 'multiple-choice' | 'open-ended';
 
 interface GameContent {
@@ -65,11 +73,25 @@ interface Player {
   streak: number; bestStreak: number; correctAnswers: number; totalAnswers: number;
 }
 
-// Start with an empty content library. Admins add all questions/media themselves.
+const DEFAULT_QUESTION_TYPES: CustomQuestionType[] = [
+  { id: '1', key: 'meme-dialogue', label: 'Meme Dialogue', icon: '💬', color: '#a855f7', isSystem: true },
+  { id: '2', key: 'song-tune', label: 'Song Tune', icon: '🎵', color: '#ec4899', isSystem: true },
+  { id: '3', key: 'movie-meme', label: 'Movie Meme', icon: '🎬', color: '#06b6d4', isSystem: true },
+];
+
 const SAMPLE_CONTENT: GameContent[] = [];
 
 const TEAM_COLORS = ['#a855f7', '#ec4899', '#3b82f6', '#22c55e', '#f97316', '#06b6d4', '#eab308', '#ef4444'];
 const TEAM_EMOJIS = ['🦁', '🐉', '🦅', '🐺', '🦊', '🐯', '🦈', '🐙'];
+
+function generateSessionCode(): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let result = 'GV-';
+  for (let i = 0; i < 4; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
+}
 
 // ==================== GUESS WHAT LOGO ====================
 const GuessWhatLogo: React.FC<{ size?: number; className?: string; style?: React.CSSProperties }> = ({ size = 80, className = '', style }) => (
@@ -109,7 +131,7 @@ function saveStats(s: any) {
   localStorage.setItem('gv_stats', JSON.stringify(s));
 }
 
-// Standalone utility to send feedback to Telegram Bot
+// Telegram helpers
 async function sendFeedbackToTelegram(name: string, category: string, message: string): Promise<{ success: boolean; error?: string }> {
   try {
     const token = (import.meta as any).env.VITE_TELEGRAM_BOT_TOKEN;
@@ -128,21 +150,14 @@ async function sendFeedbackToTelegram(name: string, category: string, message: s
 
     const response = await fetch(`https://api.telegram.org/bot${token.trim()}/sendMessage`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        chat_id: chatId.trim(),
-        text: formattedText,
-        parse_mode: 'HTML',
-      }),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId.trim(), text: formattedText, parse_mode: 'HTML' }),
     });
 
     if (!response.ok) {
       const errData = await response.json();
       return { success: false, error: errData.description || 'API request failed.' };
     }
-
     return { success: true };
   } catch (err: any) {
     console.error('Error sending Telegram feedback:', err);
@@ -150,7 +165,6 @@ async function sendFeedbackToTelegram(name: string, category: string, message: s
   }
 }
 
-// Standalone utility to send waitlist signup to Telegram Bot
 async function sendWaitlistToTelegram(name: string, email: string): Promise<{ success: boolean; error?: string }> {
   try {
     const token = (import.meta as any).env.VITE_TELEGRAM_BOT_TOKEN;
@@ -169,21 +183,14 @@ async function sendWaitlistToTelegram(name: string, email: string): Promise<{ su
 
     const response = await fetch(`https://api.telegram.org/bot${token.trim()}/sendMessage`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        chat_id: chatId.trim(),
-        text: formattedText,
-        parse_mode: 'HTML',
-      }),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId.trim(), text: formattedText, parse_mode: 'HTML' }),
     });
 
     if (!response.ok) {
       const errData = await response.json();
       return { success: false, error: errData.description || 'API request failed.' };
     }
-
     return { success: true };
   } catch (err: any) {
     console.error('Error sending Telegram waitlist signup:', err);
@@ -256,7 +263,6 @@ const AnimatedBg: React.FC<{ children: React.ReactNode; isDark: boolean }> = ({ 
       .border-theme-card { border-color: var(--card-border) !important; }
       .bg-theme-input { background-color: var(--input-bg) !important; border-color: var(--input-border) !important; }
 
-      /* Override text-white opacity utilities when in light mode */
       ${!isDark ? `
         .text-white\\/30 { color: rgba(15, 23, 42, 0.35) !important; }
         .text-white\\/40 { color: rgba(15, 23, 42, 0.45) !important; }
@@ -304,18 +310,6 @@ const GradientText: React.FC<{ children: React.ReactNode; className?: string }> 
     {children}
   </span>
 );
-
-const contentIconMap = {
-  'meme-dialogue': PenLine,
-  'song-tune': Music,
-  'movie-meme': Film,
-} satisfies Record<ContentType, React.ComponentType<{ className?: string }>>;
-
-const contentAccentMap = {
-  'meme-dialogue': '#a855f7',
-  'song-tune': '#ec4899',
-  'movie-meme': '#06b6d4',
-} satisfies Record<ContentType, string>;
 
 const SoftIcon: React.FC<{
   icon: React.ComponentType<{ className?: string }>;
@@ -367,7 +361,6 @@ const ConfirmModal: React.FC<{
   );
 };
 
-// ==================== ALERT MODAL ====================
 const AlertModal: React.FC<{
   open: boolean;
   title: string;
@@ -382,7 +375,7 @@ const AlertModal: React.FC<{
           <span className="text-3xl text-purple-400">⭐</span>
         </div>
         <h3 className="text-xl font-bold mb-2">{title}</h3>
-        <p className="text-sm text-white/50 mb-6">{message}</p>
+        <p className="text-sm text-white/50 whitespace-pre-line mb-6">{message}</p>
         <button className="w-full py-3 rounded-xl font-bold text-white" style={{ background: 'linear-gradient(135deg, #a855f7, #ec4899)' }} onClick={onOk}>
           Got it
         </button>
@@ -391,7 +384,6 @@ const AlertModal: React.FC<{
   );
 };
 
-// ==================== IMAGE WITH SPINNER ====================
 const ImageWithSpinner: React.FC<{
   src: string;
   alt: string;
@@ -432,7 +424,6 @@ const ImageWithSpinner: React.FC<{
   );
 };
 
-// ==================== LOADING SCREEN ====================
 const LoadingScreen: React.FC<{ onComplete: () => void }> = ({ onComplete }) => {
   const [progress, setProgress] = useState(0);
 
@@ -523,7 +514,6 @@ const LoadingScreen: React.FC<{ onComplete: () => void }> = ({ onComplete }) => 
   );
 };
 
-// ==================== TYPEWRITER TEXT ====================
 const TypewriterText: React.FC<{ words: string[]; interval: number }> = ({ words, interval }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [displayedText, setDisplayedText] = useState('');
@@ -585,7 +575,6 @@ const HomeScreen: React.FC<{
 }> = ({ onNavigate, stats, isDark, onToggleTheme }) => {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-6 py-12 relative">
-      {/* Corner Buttons */}
       <div className="absolute top-6 right-6 flex items-center gap-3 z-50">
         <button
           onClick={() => onNavigate('admin')}
@@ -645,8 +634,8 @@ const HomeScreen: React.FC<{
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full max-w-2xl mb-10">
         {[
-          { icon: <span className="text-3xl">🎮</span>, title: 'Play Game', desc: 'Start a new game session', action: () => onNavigate('setup') },
-          { icon: <span className="text-3xl">🏆</span>, title: 'Scoreboard', desc: 'View scores & leaders', action: () => onNavigate('scoreboard') },
+          { icon: <span className="text-3xl">🎮</span>, title: 'Play Game', desc: 'Start session & join with mobile QR', action: () => onNavigate('setup') },
+          { icon: <span className="text-3xl">🏆</span>, title: 'Scoreboard', desc: 'View scores & legends', action: () => onNavigate('scoreboard') },
         ].map((item, i) => (
           <div key={i} onClick={item.action} className="rounded-2xl p-6 text-center cursor-pointer hover:-translate-y-2 transition-all duration-300 border border-theme-card bg-theme-card"
             style={{ backdropFilter: 'blur(10px)' }}>
@@ -690,24 +679,15 @@ const HomeScreen: React.FC<{
           <span>{stats.games} games played</span>
         </div>
       </div>
-
-      <style>{`
-        @keyframes float { 0%, 100% { transform: translateY(0px) rotate(0deg); } 50% { transform: translateY(-20px) rotate(10deg); } }
-        @keyframes logoFloat {
-          0%, 100% { transform: translateY(0px) scale(1); filter: drop-shadow(0 0 10px rgba(168, 85, 247, 0.2)); }
-          50% { transform: translateY(-10px) scale(1.02); filter: drop-shadow(0 0 20px rgba(236, 72, 153, 0.4)); }
-        }
-        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
-      `}</style>
     </div>
   );
 };
 
-// ==================== QUESTION PREVIEW MODAL ====================
+// ==================== QUESTION PREVIEW MODAL WITH PLAY & PAUSE ====================
 const QuestionPreviewModal: React.FC<{ item: GameContent; onClose: () => void }> = ({ item, onClose }) => {
   const [isRevealed, setIsRevealed] = useState(false);
   const [audioPlaying, setAudioPlaying] = useState(false);
+  const [audioPaused, setAudioPaused] = useState(false);
   const [answerAudioPlaying, setAnswerAudioPlaying] = useState(false);
   const [showHint, setShowHint] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -720,7 +700,7 @@ const QuestionPreviewModal: React.FC<{ item: GameContent; onClose: () => void }>
       const audio = new Audio(qAudio);
       audioRef.current = audio;
       audio.play().then(() => setAudioPlaying(true)).catch(() => {});
-      audio.onended = () => setAudioPlaying(false);
+      audio.onended = () => { setAudioPlaying(false); setAudioPaused(false); };
     }
 
     return () => {
@@ -733,7 +713,7 @@ const QuestionPreviewModal: React.FC<{ item: GameContent; onClose: () => void }>
   const playAnswerAudio = () => {
     const aAudio = item.answerAudioData || item.answerAudioUrl;
     if (!aAudio) return;
-    if (audioRef.current) { audioRef.current.pause(); setAudioPlaying(false); }
+    if (audioRef.current) { audioRef.current.pause(); setAudioPlaying(false); setAudioPaused(false); }
     if (answerAudioRef.current) { answerAudioRef.current.pause(); }
 
     const audio = new Audio(aAudio);
@@ -746,12 +726,35 @@ const QuestionPreviewModal: React.FC<{ item: GameContent; onClose: () => void }>
     audio.onended = () => { setAnswerAudioPlaying(false); answerAudioRef.current = null; };
   };
 
+  const playQuestionAudio = () => {
+    const qAudio = item.audioData || item.audioUrl;
+    if (!qAudio) return;
+    if (audioRef.current) { audioRef.current.pause(); }
+    const audio = new Audio(qAudio);
+    audioRef.current = audio;
+    setAudioPlaying(true);
+    setAudioPaused(false);
+    audio.play().then(() => setAudioPlaying(true)).catch(console.error);
+    audio.onended = () => { setAudioPlaying(false); setAudioPaused(false); };
+  };
+
+  const togglePauseQuestionAudio = () => {
+    if (!audioRef.current) return;
+    if (audioPlaying) {
+      audioRef.current.pause();
+      setAudioPlaying(false);
+      setAudioPaused(true);
+    } else {
+      audioRef.current.play();
+      setAudioPlaying(true);
+      setAudioPaused(false);
+    }
+  };
+
   const handleReveal = () => {
     setIsRevealed(true);
     playAnswerAudio();
   };
-
-  const typeLabel = (t: string) => t === 'meme-dialogue' ? 'Meme Dialogue' : t === 'song-tune' ? 'Song Tune' : 'Movie Meme';
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(14px)' }} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
@@ -765,7 +768,7 @@ const QuestionPreviewModal: React.FC<{ item: GameContent; onClose: () => void }>
               {item.points} pts
             </span>
             <span className="text-xs px-2.5 py-1 rounded-full font-semibold bg-white/10 text-white/70">
-              {typeLabel(item.type)}
+              {item.type}
             </span>
             {item.movie && (
               <span className="text-xs px-2.5 py-1 rounded-full font-semibold bg-blue-500/20 text-blue-300 border border-blue-500/30">
@@ -795,7 +798,24 @@ const QuestionPreviewModal: React.FC<{ item: GameContent; onClose: () => void }>
             <div className="p-5 rounded-2xl border border-purple-500/30 bg-purple-500/10 flex flex-col items-center gap-3">
               <div className="flex items-center gap-3">
                 <span className="text-2xl">{audioPlaying ? '🎵' : '🔇'}</span>
-                <span className="text-sm font-bold text-purple-300">{audioPlaying ? 'Question Audio Playing' : 'Question Audio Ready'}</span>
+                <span className="text-sm font-bold text-purple-300">{audioPlaying ? 'Question Audio Playing' : audioPaused ? 'Question Audio Paused' : 'Question Audio Ready'}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={playQuestionAudio}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-cyan-200 bg-cyan-500/20 border border-cyan-500/30 hover:bg-cyan-500/30 transition-all flex items-center gap-2 cursor-pointer"
+                >
+                  <Volume2 className={`w-4 h-4 ${audioPlaying ? 'animate-bounce' : ''}`} />
+                  <span>{audioPlaying ? 'Replay Audio' : '🔊 Play / Replay Audio'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={togglePauseQuestionAudio}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-amber-200 bg-amber-500/20 border border-amber-500/30 hover:bg-amber-500/30 transition-all flex items-center gap-2 cursor-pointer"
+                >
+                  <span>{audioPlaying ? '⏸️ Pause' : '▶️ Resume'}</span>
+                </button>
               </div>
               {item.audioHint && (
                 <div className="w-full text-center">
@@ -860,16 +880,18 @@ const QuestionPreviewModal: React.FC<{ item: GameContent; onClose: () => void }>
   );
 };
 
-// ==================== ADMIN SCREEN ====================
+// ==================== ADMIN SCREEN WITH PERMISSION DENIED GRACEFUL FALLBACK ====================
 const AdminScreen: React.FC<{
   content: GameContent[];
+  questionTypes: CustomQuestionType[];
   onRefresh: () => Promise<void>;
+  onRefreshTypes: () => Promise<void>;
   onBack: () => void;
   isDark: boolean;
   onToggleTheme: () => void;
   onLogout: () => void;
   adminEmail: string | null;
-}> = ({ content: initialContent, onRefresh, onBack, isDark, onToggleTheme, onLogout, adminEmail }) => {
+}> = ({ content: initialContent, questionTypes, onRefresh, onRefreshTypes, onBack, isDark, onToggleTheme, onLogout, adminEmail }) => {
   const [content, setContent] = useState<GameContent[]>(initialContent);
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
@@ -877,7 +899,11 @@ const AdminScreen: React.FC<{
   const [search, setSearch] = useState('');
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
-  const [showMovieSuggestions, setShowMovieSuggestions] = useState(false);
+
+  // Question Type Management Modal State
+  const [showTypeModal, setShowTypeModal] = useState(false);
+  const [typeForm, setTypeForm] = useState({ key: '', label: '', icon: '🎯', color: '#a855f7' });
+  const [editingTypeKey, setEditingTypeKey] = useState<string | null>(null);
 
   const [form, setForm] = useState({
     type: 'meme-dialogue' as ContentType,
@@ -924,7 +950,7 @@ const AdminScreen: React.FC<{
   }, [selectedFolder]);
 
   useEffect(() => {
-    if (showForm) {
+    if (showForm || showTypeModal) {
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = 'unset';
@@ -932,10 +958,11 @@ const AdminScreen: React.FC<{
     return () => {
       document.body.style.overflow = 'unset';
     };
-  }, [showForm]);
+  }, [showForm, showTypeModal]);
 
   const showAlert = (title: string, message: string) => setAlertInfo({ open: true, title, message });
 
+  // RESTORED SEARCH FILTER
   const filtered = content.filter(c => {
     const matchType = filter === 'all' || c.type === filter;
     const matchSearch = !search ||
@@ -950,24 +977,6 @@ const AdminScreen: React.FC<{
       .sort((a, b) => a.localeCompare(b))
   ), [content]);
 
-  const mediaLibrary = React.useMemo(() => {
-    const seen = new Set<string>();
-    const items: Array<{ kind: 'image' | 'video' | 'audio'; url: string; label: string; folder: string }> = [];
-    content.forEach(item => {
-      const folder = item.movie?.trim() || 'Independent Content';
-      ([
-        ['image', item.imageUrl || item.imageData],
-        ['video', item.videoUrl || item.videoData],
-        ['audio', item.audioUrl || item.audioData],
-      ] as const).forEach(([kind, url]) => {
-        if (!url || seen.has(`${kind}:${url}`)) return;
-        seen.add(`${kind}:${url}`);
-        items.push({ kind, url, label: item.question || item.answer || folder, folder });
-      });
-    });
-    return items;
-  }, [content]);
-
   const isMediaUsedByOthers = (url: string | undefined, currentId: string | null) => {
     if (!url) return false;
     return content.some(item => item.id !== currentId && (
@@ -975,6 +984,65 @@ const AdminScreen: React.FC<{
       item.videoUrl === url || item.videoData === url ||
       item.audioUrl === url || item.audioData === url
     ));
+  };
+
+  // Question Type CRUD Operations with Supabase Missing Table & Permission Fallback
+  const handleSaveType = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!typeForm.label.trim()) {
+      showAlert('Missing name', 'Please enter a name for the question type.');
+      return;
+    }
+
+    const key = editingTypeKey || typeForm.key.trim().toLowerCase().replace(/[^a-z0-9]/g, '-') || typeForm.label.trim().toLowerCase().replace(/[^a-z0-9]/g, '-');
+
+    try {
+      const payload = {
+        key,
+        label: typeForm.label.trim(),
+        icon: typeForm.icon || '🎯',
+        color: typeForm.color || '#a855f7',
+        is_system: false,
+      };
+
+      const { error } = await supabase.from('question_types').upsert([payload]);
+      if (error) {
+        if (error.message?.includes('permission denied') || error.message?.includes('schema cache') || error.message?.includes('does not exist') || error.code === '42501') {
+          showAlert(
+            'Supabase Permission Required',
+            `Supabase returned: "${error.message}"\n\n` +
+            `To fix table permissions, run this in Supabase SQL Editor:\n\n` +
+            `GRANT ALL ON TABLE public.question_types TO anon, authenticated, service_role;\n\n` +
+            `We have saved your question type locally so you can continue immediately!`
+          );
+          await onRefreshTypes();
+          setShowTypeModal(false);
+          setTypeForm({ key: '', label: '', icon: '🎯', color: '#a855f7' });
+          setEditingTypeKey(null);
+          return;
+        }
+        throw error;
+      }
+
+      await onRefreshTypes();
+      setShowTypeModal(false);
+      setTypeForm({ key: '', label: '', icon: '🎯', color: '#a855f7' });
+      setEditingTypeKey(null);
+    } catch (err: any) {
+      console.error('Error saving question type:', err);
+      showAlert('Error saving type', err.message || 'Could not save question type.');
+    }
+  };
+
+  const handleDeleteType = async (typeKey: string) => {
+    try {
+      const { error } = await supabase.from('question_types').delete().eq('key', typeKey);
+      if (error) throw error;
+      await onRefreshTypes();
+    } catch (err: any) {
+      console.error('Error deleting question type:', err);
+      showAlert('Error deleting type', err.message || 'Could not delete question type.');
+    }
   };
 
   const handleSubmit = async () => {
@@ -1020,18 +1088,10 @@ const AdminScreen: React.FC<{
         return publicUrlData.publicUrl;
       };
 
-      if (imageFile) {
-        imageUrl = await uploadToStorage(imageFile, 'img');
-      }
-      if (videoFile) {
-        videoUrl = await uploadToStorage(videoFile, 'vid');
-      }
-      if (audioFile) {
-        audioUrl = await uploadToStorage(audioFile, 'aud');
-      }
-      if (answerAudioFile) {
-        answerAudioUrl = await uploadToStorage(answerAudioFile, 'ans_aud');
-      }
+      if (imageFile) { imageUrl = await uploadToStorage(imageFile, 'img'); }
+      if (videoFile) { videoUrl = await uploadToStorage(videoFile, 'vid'); }
+      if (audioFile) { audioUrl = await uploadToStorage(audioFile, 'aud'); }
+      if (answerAudioFile) { answerAudioUrl = await uploadToStorage(answerAudioFile, 'ans_aud'); }
 
       if (!form.imageData) imageUrl = '';
       if (!form.videoData) videoUrl = '';
@@ -1058,53 +1118,28 @@ const AdminScreen: React.FC<{
         const originalItem = content.find(c => c.id === editId);
         if (originalItem) {
           const filesToDelete: string[] = [];
-          if (originalItem.imageUrl && (imageFile || !form.imageData) && !isMediaUsedByOthers(originalItem.imageUrl, editId)) {
-            const name = getFileNameFromUrl(originalItem.imageUrl);
-            if (name) filesToDelete.push(name);
-          }
-          if (originalItem.videoUrl && (videoFile || !form.videoData) && !isMediaUsedByOthers(originalItem.videoUrl, editId)) {
-            const name = getFileNameFromUrl(originalItem.videoUrl);
-            if (name) filesToDelete.push(name);
-          }
-          if (originalItem.audioUrl && (audioFile || !form.audioData) && !isMediaUsedByOthers(originalItem.audioUrl, editId)) {
-            const name = getFileNameFromUrl(originalItem.audioUrl);
-            if (name) filesToDelete.push(name);
-          }
-          if (originalItem.answerAudioUrl && (answerAudioFile || !form.answerAudioData) && !isMediaUsedByOthers(originalItem.answerAudioUrl, editId)) {
-            const name = getFileNameFromUrl(originalItem.answerAudioUrl);
-            if (name) filesToDelete.push(name);
-          }
-
-          if (filesToDelete.length > 0) {
-            await supabase.storage
-              .from('game-media')
-              .remove(filesToDelete);
-          }
+          if (originalItem.imageUrl && (imageFile || !form.imageData) && !isMediaUsedByOthers(originalItem.imageUrl, editId)) { const name = getFileNameFromUrl(originalItem.imageUrl); if (name) filesToDelete.push(name); }
+          if (originalItem.videoUrl && (videoFile || !form.videoData) && !isMediaUsedByOthers(originalItem.videoUrl, editId)) { const name = getFileNameFromUrl(originalItem.videoUrl); if (name) filesToDelete.push(name); }
+          if (originalItem.audioUrl && (audioFile || !form.audioData) && !isMediaUsedByOthers(originalItem.audioUrl, editId)) { const name = getFileNameFromUrl(originalItem.audioUrl); if (name) filesToDelete.push(name); }
+          if (originalItem.answerAudioUrl && (answerAudioFile || !form.answerAudioData) && !isMediaUsedByOthers(originalItem.answerAudioUrl, editId)) { const name = getFileNameFromUrl(originalItem.answerAudioUrl); if (name) filesToDelete.push(name); }
+          if (filesToDelete.length > 0) { await supabase.storage.from('game-media').remove(filesToDelete); }
         }
 
-        const { error } = await supabase
-          .from('game_content')
-          .update(dbPayload)
-          .eq('id', editId);
-
+        const { error } = await supabase.from('game_content').update(dbPayload).eq('id', editId);
         if (error) throw error;
       } else {
-        const { error } = await supabase
-          .from('game_content')
-          .insert([dbPayload]);
-
+        const { error } = await supabase.from('game_content').insert([dbPayload]);
         if (error) throw error;
       }
 
       await onRefresh();
-      setForm({ type: 'meme-dialogue', questionType: 'open-ended', question: '', answer: '', options: ['', '', '', ''], imageData: '', videoData: '', audioData: '', audioHint: '', answerAudioData: '', difficulty: 'medium', points: 20, movie: '' });
+      setForm({ type: questionTypes[0]?.key || 'meme-dialogue', questionType: 'open-ended', question: '', answer: '', options: ['', '', '', ''], imageData: '', videoData: '', audioData: '', audioHint: '', answerAudioData: '', difficulty: 'medium', points: 20, movie: '' });
       setImageFile(null);
       setVideoFile(null);
       setAudioFile(null);
       setAnswerAudioFile(null);
       setShowForm(false);
       setEditId(null);
-      setIsCreatingFolder(false);
     } catch (err: any) {
       console.error('Error saving content:', err);
       showAlert('Error saving', err.message || 'Failed to save content to Supabase.');
@@ -1160,64 +1195,69 @@ const AdminScreen: React.FC<{
   };
 
   const diffColor = (d: string) => d === 'easy' ? '#22c55e' : d === 'medium' ? '#eab308' : '#ef4444';
-  const typeLabel = (t: string) => t === 'meme-dialogue' ? 'Meme' : t === 'song-tune' ? 'Song' : 'Movie';
+  const getTypeInfo = (k: string) => questionTypes.find(qt => qt.key === k) || { label: k, icon: '🎯', color: '#a855f7' };
 
-  const renderQuestionCard = (item: GameContent) => (
-    <div key={item.id} className="rounded-2xl border border-theme-card bg-theme-card p-5 shadow-[0_24px_80px_rgba(15,23,42,0.08)] transition-transform duration-300 hover:-translate-y-1">
-      <div className="flex items-start justify-between gap-3 mb-4">
-        <SoftIcon icon={contentIconMap[item.type]} color={contentAccentMap[item.type]} />
-        <div className="flex flex-wrap items-center gap-2">
-          {item.movie && <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-blue-500/15 text-blue-300 truncate max-w-[150px]" title={item.movie}><Folder className="w-3 h-3" /> {item.movie}</span>}
-          <span className="text-xs px-2 py-1 rounded-full" style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.75)' }}>{typeLabel(item.type)}</span>
-          <span className="text-xs px-2 py-1 rounded-full" style={{ background: 'rgba(255,255,255,0.08)', color: diffColor(item.difficulty) }}>{item.difficulty}</span>
+  const renderQuestionCard = (item: GameContent) => {
+    const tInfo = getTypeInfo(item.type);
+    return (
+      <div key={item.id} className="rounded-2xl border border-theme-card bg-theme-card p-5 shadow-[0_24px_80px_rgba(15,23,42,0.08)] transition-transform duration-300 hover:-translate-y-1">
+        <div className="flex items-start justify-between gap-3 mb-4">
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center text-lg shrink-0" style={{ background: `${tInfo.color}20`, color: tInfo.color, border: `1px solid ${tInfo.color}40` }}>
+            {tInfo.icon || '🎯'}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {item.movie && <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-blue-500/15 text-blue-300 truncate max-w-[150px]" title={item.movie}><Folder className="w-3 h-3" /> {item.movie}</span>}
+            <span className="text-xs px-2 py-1 rounded-full" style={{ background: `${tInfo.color}20`, color: tInfo.color }}>{tInfo.label}</span>
+            <span className="text-xs px-2 py-1 rounded-full" style={{ background: 'rgba(255,255,255,0.08)', color: diffColor(item.difficulty) }}>{item.difficulty}</span>
+          </div>
         </div>
-      </div>
 
-      {(item.imageUrl || item.imageData) ? (
-        <div className="mb-4 overflow-hidden rounded-3xl border border-white/10">
-          <ImageWithSpinner src={item.imageUrl || item.imageData!} alt="Content preview" className="h-44 w-full object-cover" />
-        </div>
-      ) : null}
-      <h3 className="text-sm font-semibold text-white/90 mb-3 break-words">{item.question}</h3>
-      <div className="space-y-3 text-sm text-white/70">
-        <div className="rounded-2xl bg-white/5 p-3">
-          <div className="text-[11px] uppercase tracking-[0.18em] text-white/40 mb-1">Correct answer</div>
-          <div className="text-white/90">{item.answer}</div>
-        </div>
-        {item.questionType === 'multiple-choice' && item.options?.length ? (
+        {(item.imageUrl || item.imageData) ? (
+          <div className="mb-4 overflow-hidden rounded-3xl border border-white/10">
+            <ImageWithSpinner src={item.imageUrl || item.imageData!} alt="Content preview" className="h-44 w-full object-cover" />
+          </div>
+        ) : null}
+        <h3 className="text-sm font-semibold text-white/90 mb-3 break-words">{item.question}</h3>
+        <div className="space-y-3 text-sm text-white/70">
           <div className="rounded-2xl bg-white/5 p-3">
-            <div className="text-[11px] uppercase tracking-[0.18em] text-white/40 mb-2">Options</div>
-            <div className="flex flex-wrap gap-2">
-              {item.options.map((opt, idx) => (
-                <span key={idx} className={`rounded-full px-3 py-1 text-[11px] ${opt === item.answer ? 'bg-green-500/20 text-green-200' : 'bg-white/10 text-white/60'}`}>{opt}</span>
-              ))}
+            <div className="text-[11px] uppercase tracking-[0.18em] text-white/40 mb-1">Correct answer</div>
+            <div className="text-white/90">{item.answer}</div>
+          </div>
+          {item.questionType === 'multiple-choice' && item.options?.length ? (
+            <div className="rounded-2xl bg-white/5 p-3">
+              <div className="text-[11px] uppercase tracking-[0.18em] text-white/40 mb-2">Options</div>
+              <div className="flex flex-wrap gap-2">
+                {item.options.map((opt, idx) => (
+                  <span key={idx} className={`rounded-full px-3 py-1 text-[11px] ${opt === item.answer ? 'bg-green-500/20 text-green-200' : 'bg-white/10 text-white/60'}`}>{opt}</span>
+                ))}
+              </div>
             </div>
-          </div>
-        ) : null}
-        {item.type === 'song-tune' && item.audioHint ? (
-          <div className="rounded-2xl bg-white/5 p-3">
-            <div className="text-[11px] uppercase tracking-[0.18em] text-white/40 mb-1">Audio hint</div>
-            <div>{item.audioHint}</div>
-          </div>
-        ) : null}
-      </div>
+          ) : null}
+          {item.audioHint ? (
+            <div className="rounded-2xl bg-white/5 p-3">
+              <div className="text-[11px] uppercase tracking-[0.18em] text-white/40 mb-1">Audio hint</div>
+              <div>{item.audioHint}</div>
+            </div>
+          ) : null}
+        </div>
 
-      <div className="mt-5 flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-white/10">
-        <div className="flex flex-wrap gap-2">
-          <span className="text-xs px-2 py-1 rounded-full" style={{ background: 'rgba(234,179,8,0.15)', color: '#eab308' }}>{item.points} pts</span>
-          {(item.imageData || item.imageUrl) && <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-purple-500/15 text-purple-200"><ImageIcon className="w-3 h-3" /> Image</span>}
-          {(item.videoData || item.videoUrl) && <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-pink-500/15 text-pink-200"><Video className="w-3 h-3" /> Video</span>}
-          {(item.audioData || item.audioUrl) && <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-cyan-500/15 text-cyan-200"><Music className="w-3 h-3" /> Audio</span>}
-          {(item.answerAudioUrl || item.answerAudioData) && <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-green-500/15 text-green-200"><Mic2 className="w-3 h-3" /> Answer Audio</span>}
-        </div>
-        <div className="flex gap-2">
-          <button onClick={() => setPreviewQuestion(item)} className="inline-flex items-center gap-1.5 rounded-xl border border-cyan-500/30 bg-cyan-500/15 px-3 py-2 text-sm text-cyan-200 hover:bg-cyan-500/25 transition cursor-pointer" title="Test how this question looks and sounds"><Eye className="w-4 h-4" /> Test</button>
-          <button onClick={() => startEdit(item)} className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/80 hover:bg-white/10 transition cursor-pointer"><Edit3 className="w-4 h-4" /> Edit</button>
-          <button onClick={() => setDeleteTarget(item)} className="inline-flex items-center gap-1.5 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-200 hover:bg-red-500/20 transition cursor-pointer"><Trash2 className="w-4 h-4" /> Delete</button>
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-white/10">
+          <div className="flex flex-wrap gap-2">
+            <span className="text-xs px-2 py-1 rounded-full" style={{ background: 'rgba(234,179,8,0.15)', color: '#eab308' }}>{item.points} pts</span>
+            {(item.imageData || item.imageUrl) && <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-purple-500/15 text-purple-200"><ImageIcon className="w-3 h-3" /> Image</span>}
+            {(item.videoData || item.videoUrl) && <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-pink-500/15 text-pink-200"><Video className="w-3 h-3" /> Video</span>}
+            {(item.audioData || item.audioUrl) && <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-cyan-500/15 text-cyan-200"><Music className="w-3 h-3" /> Audio</span>}
+            {(item.answerAudioUrl || item.answerAudioData) && <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-green-500/15 text-green-200"><Mic2 className="w-3 h-3" /> Answer Audio</span>}
+          </div>
+          <div className="flex gap-2">
+            <button onClick={() => setPreviewQuestion(item)} className="inline-flex items-center gap-1.5 rounded-xl border border-cyan-500/30 bg-cyan-500/15 px-3 py-2 text-sm text-cyan-200 hover:bg-cyan-500/25 transition cursor-pointer" title="Test question"><Eye className="w-4 h-4" /> Test</button>
+            <button onClick={() => startEdit(item)} className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/80 hover:bg-white/10 transition cursor-pointer"><Edit3 className="w-4 h-4" /> Edit</button>
+            <button onClick={() => setDeleteTarget(item)} className="inline-flex items-center gap-1.5 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-200 hover:bg-red-500/20 transition cursor-pointer"><Trash2 className="w-4 h-4" /> Delete</button>
+          </div>
         </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const groupedContent = React.useMemo(() => {
     const movieGroups: { [movieName: string]: GameContent[] } = {};
@@ -1251,17 +1291,10 @@ const AdminScreen: React.FC<{
             try {
               const { error } = await supabase.from('game_content').delete().eq('id', deleteTarget.id);
               if (error) throw error;
-              const filesToDelete: string[] = [];
-              if (deleteTarget.imageUrl && !isMediaUsedByOthers(deleteTarget.imageUrl, deleteTarget.id)) { const name = getFileNameFromUrl(deleteTarget.imageUrl); if (name) filesToDelete.push(name); }
-              if (deleteTarget.videoUrl && !isMediaUsedByOthers(deleteTarget.videoUrl, deleteTarget.id)) { const name = getFileNameFromUrl(deleteTarget.videoUrl); if (name) filesToDelete.push(name); }
-              if (deleteTarget.audioUrl && !isMediaUsedByOthers(deleteTarget.audioUrl, deleteTarget.id)) { const name = getFileNameFromUrl(deleteTarget.audioUrl); if (name) filesToDelete.push(name); }
-              if (deleteTarget.answerAudioUrl && !isMediaUsedByOthers(deleteTarget.answerAudioUrl, deleteTarget.id)) { const name = getFileNameFromUrl(deleteTarget.answerAudioUrl); if (name) filesToDelete.push(name); }
-              if (filesToDelete.length > 0) await supabase.storage.from('game-media').remove(filesToDelete);
               await onRefresh();
               setShowForm(false);
               setEditId(null);
             } catch (err: any) {
-              console.error('Error deleting content:', err);
               showAlert('Error deleting', err.message || 'Failed to delete content.');
             }
           }
@@ -1269,6 +1302,100 @@ const AdminScreen: React.FC<{
         }}
       />
       <AlertModal open={alertInfo.open} title={alertInfo.title} message={alertInfo.message} onOk={() => setAlertInfo({ open: false, title: '', message: '' })} />
+
+      {/* MANAGE QUESTION TYPES MODAL */}
+      {showTypeModal && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(12px)' }}>
+          <div className="w-full max-w-lg rounded-3xl border border-white/15 bg-slate-950 p-6 shadow-2xl space-y-5">
+            <div className="flex items-center justify-between border-b border-white/10 pb-4">
+              <div className="flex items-center gap-2">
+                <Settings2 className="w-5 h-5 text-purple-400" />
+                <h2 className="text-lg font-bold text-white">Manage Question Types</h2>
+              </div>
+              <button onClick={() => { setShowTypeModal(false); setEditingTypeKey(null); }} className="w-8 h-8 rounded-xl bg-white/10 text-white flex items-center justify-center">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+              {questionTypes.map(qt => (
+                <div key={qt.key} className="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/10">
+                  <div className="flex items-center gap-3">
+                    <span className="text-xl">{qt.icon || '🎯'}</span>
+                    <div>
+                      <p className="font-bold text-sm text-white">{qt.label}</p>
+                      <p className="text-[10px] text-white/40">Key: {qt.key} {qt.isSystem ? '(System)' : ''}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {!qt.isSystem && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingTypeKey(qt.key);
+                            setTypeForm({ key: qt.key, label: qt.label, icon: qt.icon || '🎯', color: qt.color || '#a855f7' });
+                          }}
+                          className="p-1.5 text-xs text-cyan-300 hover:bg-cyan-500/20 rounded-lg transition"
+                        >
+                          <Edit3 className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteType(qt.key)}
+                          className="p-1.5 text-xs text-red-400 hover:bg-red-500/20 rounded-lg transition"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <form onSubmit={handleSaveType} className="p-4 rounded-2xl bg-white/5 border border-white/10 space-y-3">
+              <h3 className="text-xs font-bold text-purple-300 uppercase tracking-wider">
+                {editingTypeKey ? 'Edit Question Type' : '➕ Add New Question Type'}
+              </h3>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[11px] text-white/50 block mb-1">Name / Label</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Bollywood Trivia"
+                    value={typeForm.label}
+                    onChange={e => setTypeForm({ ...typeForm, label: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl text-xs bg-white/5 border border-white/15 text-white outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] text-white/50 block mb-1">Emoji / Icon</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 🎬"
+                    value={typeForm.icon}
+                    onChange={e => setTypeForm({ ...typeForm, icon: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl text-xs bg-white/5 border border-white/15 text-white outline-none"
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                {editingTypeKey && (
+                  <button type="button" onClick={() => { setEditingTypeKey(null); setTypeForm({ key: '', label: '', icon: '🎯', color: '#a855f7' }); }} className="px-3 py-1.5 text-xs rounded-xl bg-white/10 text-white/70">
+                    Cancel
+                  </button>
+                )}
+                <button type="submit" className="px-4 py-2 text-xs font-bold rounded-xl bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-md">
+                  {editingTypeKey ? 'Update Type' : 'Save New Type'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       <div className="max-w-4xl mx-auto">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
           <div className="flex items-center gap-3">
@@ -1282,13 +1409,19 @@ const AdminScreen: React.FC<{
             </div>
           </div>
           <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+            <button
+              onClick={() => setShowTypeModal(true)}
+              className="flex items-center gap-2 px-3 py-2.5 rounded-xl font-semibold text-purple-200 border border-purple-500/30 bg-purple-500/20 text-xs hover:bg-purple-500/30 transition cursor-pointer"
+            >
+              <Settings2 className="w-4 h-4" /> Manage Question Types
+            </button>
             <button onClick={onLogout} className="p-3 rounded-xl flex items-center justify-center hover:scale-105 transition-all shadow-md cursor-pointer border border-red-500/20 hover:bg-red-500/10 text-red-400" title="Sign Out">
               <LogOut className="w-5 h-5" />
             </button>
             <button
               className="flex items-center gap-2 px-4 sm:px-5 py-2.5 rounded-xl font-semibold text-white border-0 cursor-pointer transition-all hover:opacity-90 text-sm"
               style={{ background: 'linear-gradient(135deg, #a855f7, #ec4899)' }}
-              onClick={() => { setShowForm(true); setEditId(null); setForm({ type: 'meme-dialogue', questionType: 'open-ended', question: '', answer: '', options: ['', '', '', ''], imageData: '', videoData: '', audioData: '', audioHint: '', answerAudioData: '', difficulty: 'medium', points: 20, movie: selectedFolder && selectedFolder !== '__independent__' ? selectedFolder : '' }); setIsCreatingFolder(!selectedFolder || selectedFolder === '__independent__'); setImageFile(null); setVideoFile(null); setAudioFile(null); setAnswerAudioFile(null); }}
+              onClick={() => { setShowForm(true); setEditId(null); setForm({ type: questionTypes[0]?.key || 'meme-dialogue', questionType: 'open-ended', question: '', answer: '', options: ['', '', '', ''], imageData: '', videoData: '', audioData: '', audioHint: '', answerAudioData: '', difficulty: 'medium', points: 20, movie: selectedFolder && selectedFolder !== '__independent__' ? selectedFolder : '' }); setIsCreatingFolder(!selectedFolder || selectedFolder === '__independent__'); setImageFile(null); setVideoFile(null); setAudioFile(null); setAnswerAudioFile(null); }}
             >
               <Plus className="w-4 h-4" /> Add Content
             </button>
@@ -1346,15 +1479,17 @@ const AdminScreen: React.FC<{
               <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div>
-                    <label className="text-sm text-white/60 mb-1 block">Type</label>
+                    <label className="text-sm text-white/60 mb-1 block">Question Type</label>
                     <select className="w-full rounded-xl px-4 py-3 text-white border-0 outline-none" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }} value={form.type} onChange={e => setForm({ ...form, type: e.target.value as ContentType })}>
-                      <option value="meme-dialogue" style={{ background: '#1a1a2e' }}>Meme Dialogue</option>
-                      <option value="song-tune" style={{ background: '#1a1a2e' }}>Song Tune</option>
-                      <option value="movie-meme" style={{ background: '#1a1a2e' }}>Movie Meme</option>
+                      {questionTypes.map(qt => (
+                        <option key={qt.key} value={qt.key} style={{ background: '#1a1a2e' }}>
+                          {qt.icon || '🎯'} {qt.label}
+                        </option>
+                      ))}
                     </select>
                   </div>
                   <div>
-                    <label className="text-sm text-white/60 mb-1 block">Question Type</label>
+                    <label className="text-sm text-white/60 mb-1 block">Format</label>
                     <select className="w-full rounded-xl px-4 py-3 text-white border-0 outline-none" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }} value={form.questionType} onChange={e => setForm({ ...form, questionType: e.target.value as QuestionType })}>
                       <option value="multiple-choice" style={{ background: '#1a1a2e' }}>Multiple Choice</option>
                       <option value="open-ended" style={{ background: '#1a1a2e' }}>Open Ended</option>
@@ -1372,25 +1507,7 @@ const AdminScreen: React.FC<{
 
                 <div>
                   <label className="text-sm text-white/60 mb-1.5 block">Question</label>
-                  <div className="flex flex-wrap gap-2 mb-2">
-                    {[
-                      form.type === 'meme-dialogue' ? 'Guess the dialogue' : form.type === 'song-tune' ? 'Guess the song' : 'Guess the movie name',
-                      form.type === 'meme-dialogue' ? 'What is being said here?' : form.type === 'song-tune' ? 'Name this song' : 'Name this movie',
-                      form.type === 'meme-dialogue' ? 'Complete the dialogue' : form.type === 'song-tune' ? 'Identify the song' : 'Which movie is this from?',
-                      'What is this?',
-                    ].map((suggestion) => (
-                      <button
-                        key={suggestion}
-                        type="button"
-                        onClick={() => setForm({ ...form, question: suggestion })}
-                        className="text-xs px-3 py-1.5 rounded-full transition-all hover:scale-105 cursor-pointer"
-                        style={{ background: form.question === suggestion ? 'rgba(168,85,247,0.25)' : 'rgba(255,255,255,0.06)', border: `1px solid ${form.question === suggestion ? 'rgba(168,85,247,0.6)' : 'rgba(255,255,255,0.12)'}`, color: form.question === suggestion ? '#c084fc' : 'rgba(255,255,255,0.6)' }}
-                      >
-                        {suggestion}
-                      </button>
-                    ))}
-                  </div>
-                  <textarea className="w-full rounded-xl px-4 py-3 text-white outline-none text-sm" rows={2} style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }} placeholder="Enter a custom question or pick a suggestion above..." value={form.question} onChange={e => setForm({ ...form, question: e.target.value })} />
+                  <textarea className="w-full rounded-xl px-4 py-3 text-white outline-none text-sm" rows={2} style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }} placeholder="Enter question..." value={form.question} onChange={e => setForm({ ...form, question: e.target.value })} />
                 </div>
 
                 <div>
@@ -1400,65 +1517,13 @@ const AdminScreen: React.FC<{
 
                 <div>
                   <label className="text-sm text-white/60 mb-1 block">Movie / Folder Name</label>
-                  <div className="relative">
-                    <input
-                      className="w-full rounded-xl px-4 py-3 text-white outline-none text-sm"
-                      style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}
-                      placeholder="Type folder name, or leave blank for Independent Content"
-                      value={form.movie || ''}
-                      onChange={e => {
-                        setForm({ ...form, movie: e.target.value });
-                        setShowMovieSuggestions(true);
-                      }}
-                      onFocus={() => setShowMovieSuggestions(true)}
-                      onBlur={() => setTimeout(() => setShowMovieSuggestions(false), 150)}
-                    />
-                    {showMovieSuggestions && (() => {
-                      const query = (form.movie || '').trim().toLowerCase();
-                      const matchingFolders = availableFolders.filter(f => f.toLowerCase().includes(query));
-                      const showIndependent = 'independent content'.includes(query);
-                      if (matchingFolders.length === 0 && !showIndependent) return null;
-                      return (
-                        <div className="absolute left-0 right-0 top-full mt-1.5 z-50 rounded-2xl border border-purple-500/30 bg-slate-900/95 p-2 shadow-2xl backdrop-blur-xl max-h-48 overflow-y-auto">
-                          {matchingFolders.length > 0 && (
-                            <>
-                              <p className="px-3 py-1.5 text-[10px] uppercase font-bold text-white/40 tracking-wider">Existing Folders</p>
-                              {matchingFolders.map(folder => (
-                                <button
-                                  key={folder}
-                                  type="button"
-                                  className="w-full text-left px-3 py-2 text-xs text-white/80 hover:bg-purple-500/20 hover:text-white rounded-xl transition-colors flex items-center gap-2 cursor-pointer"
-                                  onMouseDown={() => {
-                                    setForm({ ...form, movie: folder });
-                                    setShowMovieSuggestions(false);
-                                  }}
-                                >
-                                  <Folder className="w-3.5 h-3.5 text-cyan-400" />
-                                  <span>{folder}</span>
-                                </button>
-                              ))}
-                            </>
-                          )}
-                          {showIndependent && (
-                            <>
-                              {matchingFolders.length > 0 && <div className="my-1 border-t border-white/10" />}
-                              <button
-                                type="button"
-                                className="w-full text-left px-3 py-2 text-xs text-white/80 hover:bg-purple-500/20 hover:text-white rounded-xl transition-colors flex items-center gap-2 cursor-pointer"
-                                onMouseDown={() => {
-                                  setForm({ ...form, movie: '' });
-                                  setShowMovieSuggestions(false);
-                                }}
-                              >
-                                <Folder className="w-3.5 h-3.5 text-purple-400" />
-                                <span>Independent Content <span className="text-white/40">(no folder)</span></span>
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      );
-                    })()}
-                  </div>
+                  <input
+                    className="w-full rounded-xl px-4 py-3 text-white outline-none text-sm"
+                    style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}
+                    placeholder="Type folder name, or leave blank for Independent Content"
+                    value={form.movie || ''}
+                    onChange={e => setForm({ ...form, movie: e.target.value })}
+                  />
                 </div>
 
                 {form.questionType === 'multiple-choice' && (
@@ -1476,7 +1541,6 @@ const AdminScreen: React.FC<{
                 <div>
                   <label className="text-sm text-white/60 mb-2 block">Upload Media</label>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {/* Image Upload */}
                     <div className="rounded-xl p-4 text-center" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
                       <SoftIcon icon={ImageIcon} color="#a855f7" className="mx-auto mb-2" />
                       <p className="text-xs text-white/40 mb-2">Image (max 5MB)</p>
@@ -1492,7 +1556,6 @@ const AdminScreen: React.FC<{
                       )}
                     </div>
 
-                    {/* Video Upload */}
                     <div className="rounded-xl p-4 text-center" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
                       <SoftIcon icon={Video} color="#ec4899" className="mx-auto mb-2" />
                       <p className="text-xs text-white/40 mb-2">Video (max 10MB)</p>
@@ -1508,11 +1571,9 @@ const AdminScreen: React.FC<{
                       )}
                     </div>
 
-                    {/* Question Audio (plays at question reveal) */}
                     <div className="rounded-xl p-4 text-center" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
                       <SoftIcon icon={Mic2} color="#06b6d4" className="mx-auto mb-2" />
                       <p className="text-xs text-white/40 mb-1">Question Audio</p>
-                      <p className="text-[10px] text-white/25 mb-2">Plays when question is shown</p>
                       <label className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-xs cursor-pointer" style={{ background: 'rgba(6,182,212,0.15)', color: '#06b6d4' }}>
                         <Upload className="w-3.5 h-3.5" /> {form.audioData ? 'Replace' : 'Upload'}
                         <input type="file" accept="audio/*" onChange={e => handleFileUpload('audio', e)} className="hidden" />
@@ -1525,11 +1586,9 @@ const AdminScreen: React.FC<{
                       )}
                     </div>
 
-                    {/* Answer Audio (plays when answer is revealed) */}
                     <div className="rounded-xl p-4 text-center" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(34,197,94,0.08)' }}>
                       <SoftIcon icon={Music} color="#22c55e" className="mx-auto mb-2" />
                       <p className="text-xs text-white/40 mb-1">Answer Audio</p>
-                      <p className="text-[10px] text-white/25 mb-2">Plays when answer is revealed</p>
                       <label className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-xs cursor-pointer" style={{ background: 'rgba(34,197,94,0.15)', color: '#22c55e' }}>
                         <Upload className="w-3.5 h-3.5" /> {form.answerAudioData ? 'Replace' : 'Upload'}
                         <input type="file" accept="audio/*" onChange={e => handleFileUpload('answerAudio', e)} className="hidden" />
@@ -1542,70 +1601,66 @@ const AdminScreen: React.FC<{
                       )}
                     </div>
                   </div>
-                  {uploading && <p className="text-xs text-white/40 mt-2 text-center">Uploading {uploading}... Please wait</p>}
+                  {uploading && <p className="text-xs text-white/40 mt-2 text-center">Uploading {uploading}...</p>}
                 </div>
-
-                {form.type === 'song-tune' && (
-                  <div>
-                    <label className="text-sm text-white/60 mb-1 block flex items-center gap-2">🎵 Audio Hint / Lyrics</label>
-                    <textarea className="w-full rounded-xl px-4 py-3 text-white outline-none text-sm" rows={2}
-                      style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}
-                      placeholder="Describe the tune or provide lyrics..." value={form.audioHint || ''} onChange={e => setForm({ ...form, audioHint: e.target.value })} />
-                  </div>
-                )}
               </div>
 
-              {/* Sticky Footer */}
               <div className="flex flex-wrap items-center gap-3 justify-end p-5 sm:p-6 border-t border-white/10 bg-slate-950/95 flex-shrink-0">
-                <button disabled={isSaving} className="px-5 py-2.5 rounded-xl font-semibold cursor-pointer transition-all hover:bg-white/10 text-sm" style={{ background: 'rgba(255,255,255,0.08)', color: 'white', opacity: isSaving ? 0.5 : 1 }}
-                  onClick={() => { setShowForm(false); setEditId(null); }}>
+                <button disabled={isSaving} className="px-5 py-2.5 rounded-xl font-semibold cursor-pointer transition-all hover:bg-white/10 text-sm" style={{ background: 'rgba(255,255,255,0.08)', color: 'white', opacity: isSaving ? 0.5 : 1 }} onClick={() => { setShowForm(false); setEditId(null); }}>
                   Cancel
                 </button>
-                {editId && (
-                  <button type="button" className="px-5 py-2.5 rounded-xl font-semibold transition-all hover:bg-red-500/20 text-sm" style={{ background: 'rgba(239,68,68,0.15)', color: '#fda4af' }}
-                    onClick={() => {
-                      const currentItem = content.find(c => c.id === editId);
-                      if (currentItem) {
-                        setDeleteTarget(currentItem);
-                      }
-                    }}>
-                    <span className="inline-flex items-center gap-2"><Trash2 className="w-4 h-4" /> Delete</span>
-                  </button>
-                )}
-                <button disabled={isSaving} className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-white cursor-pointer transition-all hover:opacity-90 text-sm"
-                  style={{ background: 'linear-gradient(135deg, #a855f7, #ec4899)', opacity: isSaving ? 0.7 : 1 }}
-                  onClick={handleSubmit}>
-                  <Save className="w-4 h-4" /> {isSaving ? 'Saving...' : (editId ? 'Update' : 'Save')}
+                <button disabled={isSaving} className="px-6 py-2.5 rounded-xl font-bold text-white text-sm cursor-pointer transition-all hover:opacity-90 shadow-lg" style={{ background: 'linear-gradient(135deg, #a855f7, #ec4899)' }} onClick={handleSubmit}>
+                  {isSaving ? 'Saving...' : editId ? 'Update Content' : 'Save Content'}
                 </button>
               </div>
             </div>
           </div>
         )}
 
-        <div className="flex flex-col sm:flex-row gap-3 mb-4">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 opacity-40" />
-            <input className="w-full rounded-xl pl-10 pr-4 py-3 text-white outline-none text-sm"
-              style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}
-              placeholder="Search questions, answers, or folders..." value={search} onChange={e => { setSearch(e.target.value); setSelectedFolder(null); }} />
-          </div>
-          <div className="flex flex-wrap gap-2 overflow-x-auto pb-1">
-            {[
-              { key: 'all', label: 'All' },
-              { key: 'meme-dialogue', label: 'Memes' },
-              { key: 'song-tune', label: 'Songs' },
-              { key: 'movie-meme', label: 'Movies' },
-            ].map(f => (
-              <button key={f.key} className="px-3 py-2 rounded-lg text-sm font-medium transition-all"
+        {/* Content Filters & Restored Search Bar */}
+        <div className="mb-6 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
+            <button
+              className="px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap cursor-pointer transition-all"
+              style={{
+                background: filter === 'all' ? 'rgba(168,85,247,0.2)' : 'rgba(255,255,255,0.05)',
+                border: filter === 'all' ? '1px solid rgba(168,85,247,0.4)' : '1px solid rgba(255,255,255,0.08)',
+                color: filter === 'all' ? 'white' : 'rgba(255,255,255,0.4)',
+              }}
+              onClick={() => { setFilter('all'); setSelectedFolder(null); }}>
+              All Types
+            </button>
+            {questionTypes.map(qt => (
+              <button
+                key={qt.key}
+                className="px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap cursor-pointer transition-all flex items-center gap-1.5"
                 style={{
-                  background: filter === f.key ? 'rgba(168,85,247,0.2)' : 'rgba(255,255,255,0.05)',
-                  border: filter === f.key ? '1px solid rgba(168,85,247,0.4)' : '1px solid rgba(255,255,255,0.08)',
-                  color: filter === f.key ? 'white' : 'rgba(255,255,255,0.4)',
+                  background: filter === qt.key ? `${qt.color}25` : 'rgba(255,255,255,0.05)',
+                  border: filter === qt.key ? `1px solid ${qt.color}50` : '1px solid rgba(255,255,255,0.08)',
+                  color: filter === qt.key ? 'white' : 'rgba(255,255,255,0.4)',
                 }}
-                onClick={() => { setFilter(f.key); setSelectedFolder(null); }}>
-                {f.label}
+                onClick={() => { setFilter(qt.key); setSelectedFolder(null); }}>
+                <span>{qt.icon || '🎯'}</span>
+                <span>{qt.label}</span>
               </button>
             ))}
+          </div>
+
+          {/* Search Box Restored */}
+          <div className="relative min-w-[220px]">
+            <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-white/40" />
+            <input
+              type="text"
+              placeholder="Search question, answer, or folder..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="w-full pl-10 pr-8 py-2 rounded-xl bg-white/5 border border-white/10 text-xs text-white outline-none focus:border-purple-500 transition"
+            />
+            {search && (
+              <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white text-xs">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
         </div>
 
@@ -1700,7 +1755,7 @@ const AdminScreen: React.FC<{
                     <button
                       className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
                       style={{ background: 'linear-gradient(135deg, #a855f7, #ec4899)' }}
-                      onClick={() => { setShowForm(true); setEditId(null); setForm({ type: 'meme-dialogue', questionType: 'open-ended', question: '', answer: '', options: ['', '', '', ''], imageData: '', videoData: '', audioData: '', audioHint: '', answerAudioData: '', difficulty: 'medium', points: 20, movie: selectedFolder === '__independent__' ? '' : selectedFolder }); setIsCreatingFolder(selectedFolder === '__independent__'); setImageFile(null); setVideoFile(null); setAudioFile(null); setAnswerAudioFile(null); }}
+                      onClick={() => { setShowForm(true); setEditId(null); setForm({ type: questionTypes[0]?.key || 'meme-dialogue', questionType: 'open-ended', question: '', answer: '', options: ['', '', '', ''], imageData: '', videoData: '', audioData: '', audioHint: '', answerAudioData: '', difficulty: 'medium', points: 20, movie: selectedFolder === '__independent__' ? '' : selectedFolder }); setIsCreatingFolder(selectedFolder === '__independent__'); setImageFile(null); setVideoFile(null); setAudioFile(null); setAnswerAudioFile(null); }}
                     >
                       <Plus className="w-4 h-4" /> Add question
                     </button>
@@ -1719,26 +1774,30 @@ const AdminScreen: React.FC<{
   );
 };
 
-// ==================== GAME SETUP ====================
+// ==================== GAME SETUP WITH CLEAN VERCEL QR CODES ====================
 const GameSetup: React.FC<{
+  questionTypes: CustomQuestionType[];
   onBack: () => void;
   onStart: (settings: any) => void;
   isDark: boolean;
   onToggleTheme: () => void;
-}> = ({ onBack, onStart, isDark, onToggleTheme }) => {
+}> = ({ questionTypes, onBack, onStart, isDark, onToggleTheme }) => {
   const [mode, setMode] = useState<GameMode>('individual');
   const [teams, setTeams] = useState<Team[]>([]);
   const [players, setPlayers] = useState<Player[]>([]);
-  const playUnlimited = true;
   const [timePerQ, setTimePerQ] = useState(30);
   const [categories, setCategories] = useState<ContentType[]>(['meme-dialogue', 'song-tune', 'movie-meme']);
-  const questionTypes: QuestionType[] = ['multiple-choice', 'open-ended'];
+  const questionTypesList: QuestionType[] = ['multiple-choice', 'open-ended'];
   const [newTeamName, setNewTeamName] = useState('');
   const [newPlayerName, setNewPlayerName] = useState('');
+  const [playerError, setPlayerError] = useState('');
+  const [copiedLink, setCopiedLink] = useState(false);
 
-  const toggleCat = (t: ContentType) => {
-    if (categories.includes(t) && categories.length <= 1) return;
-    setCategories(prev => prev.includes(t) ? prev.filter(c => c !== t) : [...prev, t]);
+  const [sessionCode] = useState(() => generateSessionCode());
+
+  const toggleCat = (typeKey: string) => {
+    if (categories.includes(typeKey) && categories.length <= 1) return;
+    setCategories(prev => prev.includes(typeKey) ? prev.filter(c => c !== typeKey) : [...prev, typeKey]);
   };
 
   const addTeam = () => {
@@ -1759,8 +1818,6 @@ const GameSetup: React.FC<{
     }]);
     setNewPlayerName('');
   };
-
-  const [playerError, setPlayerError] = useState('');
 
   const handleStart = () => {
     let currentPlayers = [...players];
@@ -1795,16 +1852,30 @@ const GameSetup: React.FC<{
       }
     }
 
-    if (mode === 'individual' && currentPlayers.length === 0) {
-      setPlayerError('Please add at least one player name before starting.');
-      return;
-    }
     if (mode === 'team' && currentTeams.length < 2) {
       setPlayerError('Please add at least 2 teams before starting.');
       return;
     }
     setPlayerError('');
-    onStart({ mode, teams: currentTeams, players: currentPlayers, rounds: 999, playUnlimited: true, timePerQ, categories, questionTypes });
+    onStart({ mode, teams: currentTeams, players: currentPlayers, rounds: 999, playUnlimited: true, timePerQ, categories, questionTypes: questionTypesList, sessionId: sessionCode });
+  };
+
+  const getQRScanUrl = (team?: Team) => {
+    let base = window.location.origin;
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+      base = 'https://guess-what-two.vercel.app';
+    }
+    let url = `${base}${window.location.pathname}?session=${sessionCode}`;
+    if (team) {
+      url += `&team=${team.id}&teamName=${encodeURIComponent(team.name)}&teamEmoji=${encodeURIComponent(team.emoji)}`;
+    }
+    return url;
+  };
+
+  const copyMobileLink = (url: string) => {
+    navigator.clipboard.writeText(url);
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 2500);
   };
 
   return (
@@ -1818,19 +1889,29 @@ const GameSetup: React.FC<{
             <GuessWhatLogo size={36} />
             <div>
               <h1 className="text-2xl font-bold"><GradientText>Game Setup</GradientText></h1>
-              <p className="text-white/40 text-sm">Configure your game session</p>
+              <p className="text-white/40 text-sm">Configure session & QR mobile buzzers</p>
             </div>
           </div>
+        </div>
+
+        {/* SESSION ID DISPLAY & GENERAL QR CODE */}
+        <div className="rounded-2xl p-5 mb-6 border border-purple-500/30 bg-purple-500/10 text-center shadow-lg">
+          <div className="flex items-center justify-center gap-2 mb-1">
+            <QrCode className="w-5 h-5 text-purple-400" />
+            <span className="text-xs uppercase tracking-widest font-bold text-purple-300">Unique Game Session ID</span>
+          </div>
+          <p className="text-3xl font-black text-white font-mono tracking-widest mb-2">{sessionCode}</p>
+          <p className="text-xs text-white/60">Players scan QR code to join & use phone as a live buzzer!</p>
         </div>
 
         <div className="rounded-2xl p-6 mb-6" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
           <h2 className="text-lg font-bold mb-4 flex items-center gap-2"><span style={{ color: '#a855f7' }}>🎮</span> Game Mode</h2>
           <div className="grid grid-cols-2 gap-3">
             {[
-              { m: 'individual' as GameMode, icon: <span className="text-4xl">👤</span>, label: 'Individual', desc: 'Everyone plays solo', color: '#a855f7' },
-              { m: 'team' as GameMode, icon: <span className="text-4xl">👥</span>, label: 'Team Play', desc: 'Compete as teams', color: '#ec4899' },
+              { m: 'individual' as GameMode, icon: <span className="text-4xl">👤</span>, label: 'Individual Play', desc: 'Single session QR code for all players', color: '#a855f7' },
+              { m: 'team' as GameMode, icon: <span className="text-4xl">👥</span>, label: 'Team Battle', desc: 'Unique QR code per team', color: '#ec4899' },
             ].map(item => (
-              <button key={item.m} className="p-4 rounded-xl border-2 flex flex-col items-center gap-2 transition-all"
+              <button key={item.m} className="p-4 rounded-xl border-2 flex flex-col items-center gap-2 transition-all cursor-pointer"
                 style={{
                   borderColor: mode === item.m ? item.color : 'rgba(255,255,255,0.1)',
                   background: mode === item.m ? `${item.color}15` : 'transparent',
@@ -1838,7 +1919,7 @@ const GameSetup: React.FC<{
                 onClick={() => setMode(item.m)}>
                 <div style={{ color: mode === item.m ? item.color : 'rgba(255,255,255,0.3)' }}>{item.icon}</div>
                 <span className="font-semibold">{item.label}</span>
-                <span className="text-xs text-white/40">{item.desc}</span>
+                <span className="text-xs text-white/40 text-center">{item.desc}</span>
               </button>
             ))}
           </div>
@@ -1846,21 +1927,17 @@ const GameSetup: React.FC<{
 
         <div className="rounded-2xl p-6 mb-6" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
           <h2 className="text-lg font-bold mb-4 flex items-center gap-2"><span style={{ color: '#06b6d4' }}>💬</span> Categories</h2>
-          <div className="grid grid-cols-3 gap-3">
-            {[
-              { type: 'meme-dialogue' as ContentType, emoji: '💬', label: 'Meme Dialogues', color: '#a855f7' },
-              { type: 'song-tune' as ContentType, emoji: '🎵', label: 'Song Tunes', color: '#ec4899' },
-              { type: 'movie-meme' as ContentType, emoji: '🎬', label: 'Movie Memes', color: '#06b6d4' },
-            ].map(cat => (
-              <button key={cat.type} className="p-4 rounded-xl border-2 flex flex-col items-center gap-2 relative transition-all"
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {questionTypes.map(qt => (
+              <button key={qt.key} className="p-4 rounded-xl border-2 flex flex-col items-center gap-2 relative transition-all cursor-pointer"
                 style={{
-                  borderColor: categories.includes(cat.type) ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.05)',
-                  background: categories.includes(cat.type) ? 'rgba(255,255,255,0.1)' : 'transparent',
+                  borderColor: categories.includes(qt.key) ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.05)',
+                  background: categories.includes(qt.key) ? 'rgba(255,255,255,0.1)' : 'transparent',
                 }}
-                onClick={() => toggleCat(cat.type)}>
-                {categories.includes(cat.type) && <span className="absolute top-2 right-2 text-sm text-green-400">✓</span>}
-                <span className="text-2xl">{cat.emoji}</span>
-                <span className="font-semibold text-sm text-center">{cat.label}</span>
+                onClick={() => toggleCat(qt.key)}>
+                {categories.includes(qt.key) && <span className="absolute top-2 right-2 text-sm text-green-400">✓</span>}
+                <span className="text-2xl">{qt.icon || '🎯'}</span>
+                <span className="font-semibold text-sm text-center">{qt.label}</span>
               </button>
             ))}
           </div>
@@ -1868,48 +1945,74 @@ const GameSetup: React.FC<{
 
         {mode === 'team' ? (
           <div className="rounded-2xl p-6 mb-6" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
-            <h2 className="text-lg font-bold mb-4 flex items-center gap-2"><span style={{ color: '#ec4899' }}>👥</span> Teams</h2>
+            <h2 className="text-lg font-bold mb-2 flex items-center gap-2"><span style={{ color: '#ec4899' }}>👥</span> Teams & Unique Barcodes</h2>
+            <p className="text-xs text-white/50 mb-4">Each team gets a unique QR barcode. Players scan their team's code to join.</p>
             <div className="flex gap-2 mb-4">
               <input className="flex-1 rounded-xl px-4 py-3 text-white outline-none text-sm"
                 style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}
-                placeholder="Enter team name (or start directly after typing)" value={newTeamName} onChange={e => setNewTeamName(e.target.value)} onKeyDown={e => e.key === 'Enter' && addTeam()} />
-              <button className="px-4 rounded-xl text-white flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #a855f7, #ec4899)' }} onClick={addTeam}>
+                placeholder="Enter team name (e.g. Red Lions)" value={newTeamName} onChange={e => setNewTeamName(e.target.value)} onKeyDown={e => e.key === 'Enter' && addTeam()} />
+              <button className="px-4 rounded-xl text-white flex items-center justify-center cursor-pointer" style={{ background: 'linear-gradient(135deg, #a855f7, #ec4899)' }} onClick={addTeam}>
                 ➕
               </button>
             </div>
-            <div className="space-y-2">
+            <div className="space-y-4">
               {teams.map(team => (
-                <div key={team.id} className="flex items-center gap-3 p-3 rounded-xl" style={{ background: 'rgba(255,255,255,0.05)' }}>
-                  <span className="text-2xl">{team.emoji}</span>
-                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: team.color }} />
-                  <span className="font-medium flex-1">{team.name}</span>
-                  <button onClick={() => setTeams(teams.filter(t => t.id !== team.id))} className="text-white/30 hover:text-red-400 transition-colors">
-                    🗑️
-                  </button>
+                <div key={team.id} className="p-4 rounded-2xl border flex flex-col sm:flex-row items-center justify-between gap-4" style={{ background: `${team.color}15`, border: `1px solid ${team.color}40` }}>
+                  <div className="flex items-center gap-3">
+                    <span className="text-3xl">{team.emoji}</span>
+                    <div>
+                      <p className="font-bold text-white text-base">{team.name}</p>
+                      <p className="text-xs text-white/50">Players scan code below to join this team</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <img src={getQRCodeUrl(getQRScanUrl(team), 110)} alt={`${team.name} QR`} className="w-20 h-20 rounded-xl border border-white/20 bg-white p-1 shadow-md" />
+                    <button onClick={() => setTeams(teams.filter(t => t.id !== team.id))} className="text-white/30 hover:text-red-400 transition-colors p-2">
+                      🗑️
+                    </button>
+                  </div>
                 </div>
               ))}
-              {teams.length === 0 && <p className="text-white/30 text-sm text-center py-4">Add at least 2 teams</p>}
+              {teams.length === 0 && <p className="text-white/30 text-sm text-center py-4">Add at least 2 teams to generate unique team barcodes.</p>}
             </div>
           </div>
         ) : (
           <div className="rounded-2xl p-6 mb-6" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
-            <h2 className="text-lg font-bold mb-4 flex items-center gap-2"><span style={{ color: '#3b82f6' }}>👤</span> Players <span className="text-sm font-semibold" style={{ color: '#ef4444' }}>*Required</span></h2>
+            <h2 className="text-lg font-bold mb-2 flex items-center gap-2"><span style={{ color: '#3b82f6' }}>👤</span> Individual Game Session QR</h2>
+            <p className="text-xs text-white/50 mb-4">All players scan this session QR code on their phone to join as solo players.</p>
+
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-6 p-6 rounded-2xl bg-white/5 border border-white/10 mb-4">
+              <img src={getQRCodeUrl(getQRScanUrl(), 140)} alt="Session QR" className="w-32 h-32 rounded-2xl border-2 border-purple-500/40 bg-white p-2 shadow-2xl" />
+              <div className="text-center sm:text-left space-y-2">
+                <p className="text-xs font-bold text-purple-300 uppercase tracking-wider">Scan with Phone Camera</p>
+                <p className="text-sm font-semibold text-white">Join session as a player</p>
+                <button
+                  type="button"
+                  onClick={() => copyMobileLink(getQRScanUrl())}
+                  className="px-3 py-1.5 rounded-lg bg-purple-500/20 border border-purple-500/30 text-purple-200 text-xs font-semibold flex items-center gap-1.5 hover:bg-purple-500/30 transition cursor-pointer"
+                >
+                  {copiedLink ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copiedLink ? 'Link Copied!' : '📋 Copy Mobile Link'}</span>
+                </button>
+              </div>
+            </div>
+
             <div className="flex gap-2 mb-4">
               <input className="flex-1 rounded-xl px-4 py-3 text-white outline-none text-sm"
                 style={{ background: 'rgba(255,255,255,0.06)', border: `1px solid ${playerError ? 'rgba(239,68,68,0.5)' : 'rgba(255,255,255,0.12)'}` }}
-                placeholder="Enter player name (or start directly after typing)" value={newPlayerName} onChange={e => { setNewPlayerName(e.target.value); if (playerError) setPlayerError(''); }} onKeyDown={e => e.key === 'Enter' && addPlayer()} />
-              <button className="px-4 rounded-xl text-white flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #a855f7, #ec4899)' }} onClick={addPlayer}>
+                placeholder="Or manually add player name on this screen..." value={newPlayerName} onChange={e => { setNewPlayerName(e.target.value); if (playerError) setPlayerError(''); }} onKeyDown={e => e.key === 'Enter' && addPlayer()} />
+              <button className="px-4 rounded-xl text-white flex items-center justify-center cursor-pointer" style={{ background: 'linear-gradient(135deg, #a855f7, #ec4899)' }} onClick={addPlayer}>
                 ➕
               </button>
             </div>
             {playerError && (
-              <div className="mb-3 px-4 py-2.5 rounded-xl text-sm font-medium" style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)', color: '#f87171' }}>
+              <div className="mb-3 px-4 py-2.5 rounded-xl text-sm font-medium bg-red-500/15 border border-red-500/30 text-red-300">
                 ⚠️ {playerError}
               </div>
             )}
             <div className="space-y-2">
               {players.map(p => (
-                <div key={p.id} className="flex items-center gap-3 p-3 rounded-xl" style={{ background: 'rgba(255,255,255,0.05)' }}>
+                <div key={p.id} className="flex items-center gap-3 p-3 rounded-xl bg-white/5 border border-white/5">
                   <span>👤</span>
                   <span className="font-medium flex-1">{p.name}</span>
                   <button onClick={() => setPlayers(players.filter(pl => pl.id !== p.id))} className="text-white/30 hover:text-red-400 transition-colors">
@@ -1917,16 +2020,15 @@ const GameSetup: React.FC<{
                   </button>
                 </div>
               ))}
-              {players.length === 0 && <p className="text-white/30 text-sm text-center py-4">Add at least one player name to start the game.</p>}
             </div>
           </div>
         )}
 
         <button
-          className="w-full py-4 rounded-xl text-lg font-bold text-white flex items-center justify-center gap-3 transition-all active:scale-[0.98]"
+          className="w-full py-4 rounded-xl text-lg font-bold text-white flex items-center justify-center gap-3 transition-all active:scale-[0.98] cursor-pointer"
           style={{ background: 'linear-gradient(135deg, #a855f7, #ec4899)', boxShadow: '0 8px 25px rgba(168,85,247,0.3)' }}
           onClick={handleStart}>
-          🎮 {mode === 'team' ? 'Start Team Battle' : 'Start Game'}
+          🎮 {mode === 'team' ? 'Start Team Battle Session' : 'Start Individual Session'}
         </button>
       </div>
     </div>
@@ -1942,6 +2044,7 @@ const GameLobby: React.FC<{
   onToggleTheme: () => void;
 }> = ({ settings, onStart, onBack, isDark, onToggleTheme }) => {
   const [countdown, setCountdown] = useState<number | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const handleStart = () => setCountdown(3);
 
@@ -1952,8 +2055,26 @@ const GameLobby: React.FC<{
     return () => clearTimeout(t);
   }, [countdown, onStart]);
 
+  const getQRScanUrl = (team?: Team) => {
+    let base = window.location.origin;
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+      base = 'https://guess-what-two.vercel.app';
+    }
+    let url = `${base}${window.location.pathname}?session=${settings.sessionId}`;
+    if (team) {
+      url += `&team=${team.id}&teamName=${encodeURIComponent(team.name)}&teamEmoji=${encodeURIComponent(team.emoji)}`;
+    }
+    return url;
+  };
+
+  const copyMobileLink = (url: string) => {
+    navigator.clipboard.writeText(url);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2500);
+  };
+
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 relative">
+    <div className="min-h-screen flex items-center justify-center px-4 py-8 relative">
       {countdown !== null && (
         <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(10px)' }}>
           <div style={{ fontSize: '10rem', fontWeight: 900, background: 'linear-gradient(135deg, #a855f7, #ec4899, #3b82f6)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
@@ -1962,49 +2083,59 @@ const GameLobby: React.FC<{
         </div>
       )}
       <div className="max-w-xl w-full">
-        <div className="text-center mb-8 flex flex-col items-center">
+        <div className="text-center mb-6 flex flex-col items-center">
           <GuessWhatLogo size={64} style={{ animation: 'pulse 2s cubic-bezier(0.4,0,0.6,1) infinite' }} />
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm text-white/60 mb-4 border border-theme-card bg-theme-card">
-            ⚡ Get Ready to Play!
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-mono font-bold text-purple-300 mb-2 border border-purple-500/30 bg-purple-500/15">
+            🎮 SESSION ID: {settings.sessionId}
           </div>
           <h1 className="text-4xl sm:text-5xl font-black mb-2">{settings.mode === 'team' ? '⚔️ Team Battle' : '🎮 Game On!'}</h1>
-          <p className="text-white/40">Unlimited questions • Untimed</p>
+          <p className="text-white/40">Scan barcodes below to connect phones as live buzzers</p>
         </div>
 
-        <div className="rounded-2xl p-6 mb-6" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
+        <div className="rounded-2xl p-6 mb-6 border border-white/10 bg-white/5 text-center">
           {settings.mode === 'team' ? (
             <>
-              <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><span style={{ color: '#ec4899' }}>👥</span> Teams</h3>
-              <div className="grid grid-cols-2 gap-3">
+              <h3 className="text-sm font-bold text-pink-300 mb-3 uppercase tracking-wider">Team Barcodes</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {settings.teams.map((team: Team) => (
-                  <div key={team.id} className="p-4 rounded-xl flex items-center gap-3" style={{ background: `${team.color}15`, border: `1px solid ${team.color}30` }}>
-                    <span className="text-3xl">{team.emoji}</span>
-                    <div><p className="font-bold">{team.name}</p><p className="text-xs text-white/40">Score: 0</p></div>
+                  <div key={team.id} className="p-4 rounded-xl flex flex-col items-center gap-2 border" style={{ background: `${team.color}15`, borderColor: `${team.color}40` }}>
+                    <span className="text-2xl">{team.emoji}</span>
+                    <p className="font-bold text-white">{team.name}</p>
+                    <img src={getQRCodeUrl(getQRScanUrl(team), 110)} alt={`${team.name} QR`} className="w-24 h-24 rounded-xl border border-white/20 bg-white p-1 shadow-md my-1" />
+                    <button
+                      type="button"
+                      onClick={() => copyMobileLink(getQRScanUrl(team))}
+                      className="text-[10px] text-purple-200 underline hover:text-white"
+                    >
+                      {copied ? 'Copied!' : 'Copy Link'}
+                    </button>
                   </div>
                 ))}
               </div>
             </>
           ) : (
-            <>
-              <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><span style={{ color: '#3b82f6' }}>👤</span> Players</h3>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {settings.players.map((p: Player) => (
-                  <div key={p.id} className="p-3 rounded-xl flex items-center gap-2" style={{ background: 'rgba(255,255,255,0.05)' }}>
-                    <span className="text-xl">👤</span>
-                    <span className="font-medium text-sm">{p.name}</span>
-                  </div>
-                ))}
-              </div>
-            </>
+            <div className="flex flex-col items-center gap-3">
+              <h3 className="text-sm font-bold text-purple-300 uppercase tracking-wider">Session Barcode</h3>
+              <img src={getQRCodeUrl(getQRScanUrl(), 140)} alt="Session QR" className="w-36 h-36 rounded-2xl border-2 border-purple-500/40 bg-white p-2 shadow-2xl" />
+              <p className="text-xs text-white/60">Scan with phone camera to join & use phone buzzer</p>
+              <button
+                type="button"
+                onClick={() => copyMobileLink(getQRScanUrl())}
+                className="px-3.5 py-1.5 rounded-lg bg-purple-500/20 border border-purple-500/30 text-purple-200 text-xs font-semibold flex items-center gap-1.5 hover:bg-purple-500/30 transition cursor-pointer"
+              >
+                {copied ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{copied ? 'Link Copied to Clipboard!' : '📋 Copy Mobile Join Link'}</span>
+              </button>
+            </div>
           )}
         </div>
 
-        <button className="w-full py-4 rounded-xl text-lg font-bold text-white flex items-center justify-center gap-3 transition-all active:scale-[0.98]"
+        <button className="w-full py-4 rounded-xl text-lg font-bold text-white flex items-center justify-center gap-3 transition-all active:scale-[0.98] cursor-pointer"
           style={{ background: 'linear-gradient(135deg, #a855f7, #ec4899)', boxShadow: '0 8px 25px rgba(168,85,247,0.3)' }} onClick={handleStart}>
           ▶️ {countdown !== null ? 'Starting...' : 'Start Game!'}
         </button>
 
-        <button className="w-full mt-3 py-3 text-white/40 hover:text-white/60 transition-colors text-sm flex items-center justify-center gap-2" onClick={onBack}>
+        <button className="w-full mt-3 py-3 text-white/40 hover:text-white/60 transition-colors text-sm flex items-center justify-center gap-2 cursor-pointer" onClick={onBack}>
           ⬅️ Back to Setup
         </button>
       </div>
@@ -2012,7 +2143,7 @@ const GameLobby: React.FC<{
   );
 };
 
-// ==================== GAME PLAY ====================
+// ==================== GAME PLAY WITH PLAY/PAUSE AUDIO & LIVE BUZZERS ====================
 const GamePlay: React.FC<{
   question: GameContent & { shuffledOptions?: string[] };
   roundNumber: number;
@@ -2022,53 +2153,59 @@ const GamePlay: React.FC<{
   players: Player[];
   teams: Team[];
   mode: GameMode;
-}> = ({ question, roundNumber, totalRounds, onNext, onExit, players, teams, mode }) => {
+  sessionId?: string;
+}> = ({ question, roundNumber, totalRounds, onNext, onExit, players, teams, mode, sessionId }) => {
   const [isRevealed, setIsRevealed] = useState(false);
   const [selectedWinnerId, setSelectedWinnerId] = useState<string | null>(null);
   const [showHint, setShowHint] = useState(false);
+
+  // Audio state
   const [audioPlaying, setAudioPlaying] = useState(false);
+  const [audioPaused, setAudioPaused] = useState(false);
   const [answerAudioPlaying, setAnswerAudioPlaying] = useState(false);
+
   const [waveHeights, setWaveHeights] = useState<number[]>(Array(15).fill(4));
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const answerAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  const [liveBuzzes, setLiveBuzzes] = useState<BuzzerEntry[]>([]);
 
   useEffect(() => {
     setIsRevealed(false);
     setSelectedWinnerId(null);
     setShowHint(false);
     setAnswerAudioPlaying(false);
-    // Stop any answer audio from previous question
+    setAudioPaused(false);
+    setLiveBuzzes([]);
+
     if (answerAudioRef.current) {
       answerAudioRef.current.pause();
       answerAudioRef.current = null;
     }
   }, [question.id]);
 
-  // Audio Playback Autoplay Logic
   useEffect(() => {
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current = null;
     }
     setAudioPlaying(false);
+    setAudioPaused(false);
 
-    if (question.audioData) {
-      const audio = new Audio(question.audioData);
+    const qAudio = question.audioData || question.audioUrl;
+    if (qAudio) {
+      const audio = new Audio(qAudio);
       audioRef.current = audio;
 
       const playTimeout = setTimeout(() => {
         if (audioRef.current) {
           audio.play()
-            .then(() => setAudioPlaying(true))
-            .catch(err => {
-              console.error("Audio playback failed or was blocked:", err);
-            });
+            .then(() => { setAudioPlaying(true); setAudioPaused(false); })
+            .catch(err => console.error("Audio playback failed:", err));
         }
       }, 600);
 
-      audio.onended = () => {
-        setAudioPlaying(false);
-      };
+      audio.onended = () => { setAudioPlaying(false); setAudioPaused(false); };
 
       return () => {
         clearTimeout(playTimeout);
@@ -2078,24 +2215,85 @@ const GamePlay: React.FC<{
     }
   }, [question.id]);
 
-  // Audio Wave Visualizer animation interval
+  useEffect(() => {
+    if (!sessionId) return;
+
+    const channelName = `session_${sessionId.toUpperCase()}`;
+    const channel = supabase.channel(channelName, { config: { broadcast: { ack: true } } });
+
+    channel.subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        channel.send({
+          type: 'broadcast',
+          event: 'question_change',
+          payload: { questionIndex: roundNumber - 1, questionId: question.id },
+        });
+      }
+    });
+
+    channel.on('broadcast', { event: 'player_buzz' }, (payload) => {
+      if (!payload?.payload) return;
+      const b: BuzzerEntry = payload.payload;
+
+      setLiveBuzzes((prev) => {
+        if (prev.some((entry) => entry.playerName === b.playerName)) return prev;
+        const updated = [...prev, b].sort((x, y) => x.timestamp - y.timestamp);
+
+        const rank = updated.findIndex((e) => e.playerName === b.playerName) + 1;
+        channel.send({
+          type: 'broadcast',
+          event: 'buzz_ack',
+          payload: { playerName: b.playerName, rank },
+        });
+
+        return updated;
+      });
+    });
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [sessionId, roundNumber, question.id]);
+
+  // Audio Play & Pause Control Handlers
+  const handleReplayQuestionAudio = () => {
+    const qAudio = question.audioData || question.audioUrl;
+    if (!qAudio) return;
+    if (audioRef.current) { audioRef.current.pause(); }
+    const audio = new Audio(qAudio);
+    audioRef.current = audio;
+    setAudioPlaying(true);
+    setAudioPaused(false);
+    audio.play().then(() => { setAudioPlaying(true); setAudioPaused(false); }).catch(console.error);
+    audio.onended = () => { setAudioPlaying(false); setAudioPaused(false); };
+  };
+
+  const handleTogglePauseAudio = () => {
+    if (!audioRef.current) return;
+    if (audioPlaying) {
+      audioRef.current.pause();
+      setAudioPlaying(false);
+      setAudioPaused(true);
+    } else {
+      audioRef.current.play();
+      setAudioPlaying(true);
+      setAudioPaused(false);
+    }
+  };
+
   useEffect(() => {
     if (!audioPlaying) {
       setWaveHeights(Array(15).fill(4));
       return;
     }
     const interval = setInterval(() => {
-      setWaveHeights(
-        Array.from({ length: 15 }, () => Math.floor(Math.random() * 32) + 8)
-      );
+      setWaveHeights(Array.from({ length: 15 }, () => Math.floor(Math.random() * 32) + 8));
     }, 150);
     return () => clearInterval(interval);
   }, [audioPlaying]);
 
   const progress = ((roundNumber - 1) / totalRounds) * 100;
-  const typeLabel = (t: string) => t === 'meme-dialogue' ? 'Meme Dialogue' : t === 'song-tune' ? 'Song Tune' : 'Movie Meme';
   const isMC = question.questionType === 'multiple-choice';
-  const QuestionTypeIcon = contentIconMap[question.type];
   const entities = mode === 'team' ? teams : players;
 
   const playAnswerAudio = () => {
@@ -2105,6 +2303,7 @@ const GamePlay: React.FC<{
       audioRef.current.pause();
       audioRef.current = null;
       setAudioPlaying(false);
+      setAudioPaused(false);
     }
     if (answerAudioRef.current) {
       answerAudioRef.current.pause();
@@ -2113,12 +2312,7 @@ const GamePlay: React.FC<{
     const audio = new Audio(answerAudio);
     answerAudioRef.current = audio;
     setAnswerAudioPlaying(true);
-    audio.play()
-      .then(() => setAnswerAudioPlaying(true))
-      .catch(err => {
-        console.error('Answer audio playback failed:', err);
-        setAnswerAudioPlaying(false);
-      });
+    audio.play().then(() => setAnswerAudioPlaying(true)).catch(console.error);
     audio.onended = () => {
       setAnswerAudioPlaying(false);
       answerAudioRef.current = null;
@@ -2136,42 +2330,61 @@ const GamePlay: React.FC<{
         <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
           <div className="flex items-center gap-2 flex-wrap">
             <GuessWhatLogo size={24} />
-            <span className="text-xs px-2.5 py-1 rounded-full font-semibold" style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.6)' }}>
+            <span className="text-xs px-2.5 py-1 rounded-full font-semibold bg-white/10 text-white/70">
               Question {roundNumber}/{totalRounds}
             </span>
-            <span className="text-xs px-2.5 py-1 rounded-full font-semibold" style={{ background: 'rgba(168,85,247,0.15)', color: '#a855f7' }}>
-              <span className="inline-flex items-center gap-1.5"><QuestionTypeIcon className="w-3.5 h-3.5" /> {typeLabel(question.type)}</span>
+            <span className="text-xs px-2.5 py-1 rounded-full font-semibold bg-purple-500/20 text-purple-300">
+              {question.type}
             </span>
-            <span className="text-xs px-2.5 py-1 rounded-full font-semibold" style={{ background: 'rgba(234,179,8,0.15)', color: '#eab308' }}>
+            <span className="text-xs px-2.5 py-1 rounded-full font-semibold bg-yellow-500/20 text-yellow-300">
               {question.points} pts
             </span>
-            <span className="text-xs px-2.5 py-1 rounded-full font-semibold" style={{ background: isMC ? 'rgba(59,130,246,0.15)' : 'rgba(34,197,94,0.15)', color: isMC ? '#3b82f6' : '#22c55e' }}>
-              {isMC ? '📋 MC' : '✍️ Open'}
-            </span>
+            {sessionId && (
+              <span className="text-xs px-3 py-1 rounded-full font-mono font-bold bg-purple-500/30 text-purple-200 border border-purple-500/40">
+                🎮 GAME ID: {sessionId}
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={onExit} className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold text-red-400 hover:text-red-300 transition-colors" style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)' }}>
+            <button onClick={onExit} className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold text-red-400 hover:text-red-300 transition-colors bg-red-500/10 border border-red-500/20">
               🚪 Exit Game
             </button>
           </div>
         </div>
 
-        {/* Mobile Live Score Tracer */}
-        <div className="flex lg:hidden items-center gap-2 overflow-x-auto pb-3 mb-3 border-b border-white/10 scrollbar-none">
-          {entities.map(e => (
-            <div key={e.id} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-xs font-semibold whitespace-nowrap">
-              <span>{('emoji' in e) ? (e as Team).emoji : '👤'}</span>
-              <span className="text-white/80 max-w-[80px] truncate">{e.name}</span>
-              <span className="text-purple-400 font-bold">{e.score} pts</span>
+        {/* LIVE BUZZER ORDER DISPLAY */}
+        {liveBuzzes.length > 0 && (
+          <div className="mb-4 p-4 rounded-2xl bg-gradient-to-r from-red-500/20 via-purple-500/20 to-pink-500/20 border border-red-500/30 backdrop-blur-xl shadow-xl animate-fadeIn">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <span className="text-xl animate-bounce">🚨</span>
+                <h3 className="font-extrabold text-sm text-white uppercase tracking-wider">Live Buzzer Order</h3>
+              </div>
+              <span className="text-xs text-white/50">{liveBuzzes.length} buzzed</span>
             </div>
-          ))}
-        </div>
+            <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+              {liveBuzzes.map((b, idx) => (
+                <div key={b.id || idx} className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white/10 border border-white/15 text-xs font-bold whitespace-nowrap shadow-md">
+                  <span className={`px-1.5 py-0.5 rounded-md text-[10px] ${idx === 0 ? 'bg-yellow-400 text-black font-black' : idx === 1 ? 'bg-slate-300 text-black' : 'bg-amber-600 text-white'}`}>
+                    #{idx + 1}
+                  </span>
+                  <span className="text-white">{b.playerName}</span>
+                  {b.teamName && (
+                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-pink-500/30 text-pink-200">
+                      {b.teamEmoji || '👥'} {b.teamName}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           {/* Left Column: Question & Media */}
           <div className="lg:col-span-8 space-y-5">
-            <div className="w-full h-1.5 rounded-full mb-2" style={{ background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
-              <div className="h-full rounded-full transition-all duration-500" style={{ width: `${progress}%`, background: 'linear-gradient(90deg, #a855f7, #ec4899)' }} />
+            <div className="w-full h-1.5 rounded-full mb-2 bg-white/10 overflow-hidden">
+              <div className="h-full rounded-full transition-all duration-500 bg-gradient-to-r from-purple-500 to-pink-500" style={{ width: `${progress}%` }} />
             </div>
 
             <div className="rounded-2xl p-6 lg:p-10 border border-theme-card bg-theme-card shadow-xl" style={{ backdropFilter: 'blur(10px)' }}>
@@ -2185,59 +2398,59 @@ const GamePlay: React.FC<{
                   <video src={question.videoData} controls className="w-full max-h-[45vh] lg:max-h-[55vh] object-contain rounded-xl shadow-md" />
                 </div>
               )}
-              {question.audioData && (
-                <div className="mb-6 p-6 rounded-2xl flex flex-col items-center justify-center gap-4 relative overflow-hidden"
-                  style={{
-                    background: 'linear-gradient(135deg, rgba(6,182,212,0.08), rgba(168,85,247,0.08))',
-                    border: '1px solid rgba(168,85,247,0.15)'
-                  }}>
+              {(question.audioData || question.audioUrl) && (
+                <div className="mb-6 p-6 rounded-2xl flex flex-col items-center justify-center gap-4 relative overflow-hidden bg-gradient-to-r from-cyan-500/10 to-purple-500/10 border border-purple-500/20">
                   <div className="w-16 h-16 rounded-full flex items-center justify-center relative bg-gradient-to-r from-cyan-500 to-purple-500 shadow-lg shadow-cyan-500/20">
-                    {audioPlaying ? (
-                      <span className="text-2xl">🎵</span>
-                    ) : (
-                      <span className="text-2xl">🔇</span>
-                    )}
+                    {audioPlaying ? <span className="text-2xl">🎵</span> : <span className="text-2xl">🔇</span>}
                   </div>
 
-                  <div className="text-center">
+                  <div className="text-center space-y-2">
                     <p className="font-bold text-sm text-cyan-400 uppercase tracking-widest">
-                      {audioPlaying ? 'Playing Audio' : 'Audio Player'}
+                      {audioPlaying ? 'Playing Question Audio' : audioPaused ? 'Question Audio Paused' : 'Question Audio Ready'}
                     </p>
+
+                    {/* PLAY, REPLAY & PAUSE AUDIO BUTTONS */}
+                    <div className="flex items-center gap-2 flex-wrap justify-center">
+                      <button
+                        type="button"
+                        onClick={handleReplayQuestionAudio}
+                        className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold text-cyan-200 bg-cyan-500/20 border border-cyan-500/30 hover:bg-cyan-500/30 transition-all cursor-pointer shadow-md hover:scale-105 active:scale-95"
+                      >
+                        <Volume2 className={`w-4 h-4 ${audioPlaying ? 'animate-bounce' : ''}`} />
+                        <span>{audioPlaying ? 'Replay Audio' : '🔊 Play / Replay Audio'}</span>
+                      </button>
+
+                      {audioRef.current && (audioPlaying || audioPaused) && (
+                        <button
+                          type="button"
+                          onClick={handleTogglePauseAudio}
+                          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold text-amber-200 bg-amber-500/20 border border-amber-500/30 hover:bg-amber-500/30 transition-all cursor-pointer shadow-md hover:scale-105 active:scale-95"
+                        >
+                          <span>{audioPlaying ? '⏸️ Pause Audio' : '▶️ Resume Audio'}</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
 
-                  {/* Dynamic wave visualizer */}
-                  <div className="flex items-end justify-center gap-1.5 h-10 mt-2">
+                  {/* Wave Visualizer */}
+                  <div className="flex items-end justify-center gap-1.5 h-10 mt-1">
                     {waveHeights.map((h, idx) => (
-                      <div
-                        key={idx}
-                        className="w-1.5 rounded-full bg-gradient-to-t from-cyan-400 to-purple-500 transition-all duration-150"
-                        style={{
-                          height: `${h}px`,
-                        }}
-                      />
+                      <div key={idx} className="w-1.5 rounded-full bg-gradient-to-t from-cyan-400 to-purple-500 transition-all duration-150" style={{ height: `${h}px` }} />
                     ))}
                   </div>
 
                   {question.audioHint && (
                     <div className="mt-2 w-full max-w-md border-t border-white/5 pt-4 text-center">
-                      <button
-                        type="button"
-                        onClick={() => setShowHint(!showHint)}
-                        className="text-xs text-white/40 hover:text-white/60 underline transition-colors"
-                      >
+                      <button type="button" onClick={() => setShowHint(!showHint)} className="text-xs text-white/40 hover:text-white/60 underline">
                         {showHint ? 'Hide Text Clue' : 'Show Text Clue'}
                       </button>
-                      {showHint && (
-                        <p className="text-sm text-white/70 mt-2 bg-white/5 p-3 rounded-xl border border-white/5 animate-slideDown">
-                          {question.audioHint}
-                        </p>
-                      )}
+                      {showHint && <p className="text-sm text-white/70 mt-2 bg-white/5 p-3 rounded-xl border border-white/5">{question.audioHint}</p>}
                     </div>
                   )}
                 </div>
               )}
 
-              <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold lg:font-extrabold text-center leading-snug lg:leading-normal">{question.question}</h2>
+              <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold lg:font-extrabold text-center leading-snug">{question.question}</h2>
 
               <div className="flex items-center justify-center gap-1.5 mt-4">
                 {[1, 2, 3].map(lvl => {
@@ -2254,14 +2467,9 @@ const GamePlay: React.FC<{
                 {(question.shuffledOptions || question.options || []).map((opt: string, idx: number) => {
                   const isCorrectOpt = isRevealed && opt === question.answer;
                   return (
-                    <div key={idx}
-                      className={`p-4 lg:p-5 rounded-xl text-left transition-all duration-300 ${isCorrectOpt
-                        ? 'bg-green-500/20 border-2 border-green-400 shadow-[0_0_15px_rgba(34,197,94,0.3)]'
-                        : 'bg-white/5 border border-white/10'
-                        }`}>
+                    <div key={idx} className={`p-4 lg:p-5 rounded-xl text-left transition-all duration-300 ${isCorrectOpt ? 'bg-green-500/20 border-2 border-green-400 shadow-[0_0_15px_rgba(34,197,94,0.3)]' : 'bg-white/5 border border-white/10'}`}>
                       <div className="flex items-center gap-3">
-                        <span className={`w-9 h-9 lg:w-10 lg:h-10 rounded-lg flex items-center justify-center text-sm lg:text-base font-bold flex-shrink-0 ${isCorrectOpt ? 'bg-green-500/30 text-green-300 font-extrabold' : 'bg-white/10 text-white/50'
-                          }`}>
+                        <span className={`w-9 h-9 lg:w-10 lg:h-10 rounded-lg flex items-center justify-center text-sm lg:text-base font-bold flex-shrink-0 ${isCorrectOpt ? 'bg-green-500/30 text-green-300 font-extrabold' : 'bg-white/10 text-white/50'}`}>
                           {isCorrectOpt ? '✓' : String.fromCharCode(65 + idx)}
                         </span>
                         <span className={`text-sm lg:text-base font-medium ${isCorrectOpt ? 'text-green-300 font-bold' : 'text-white/80'}`}>{opt}</span>
@@ -2298,7 +2506,7 @@ const GamePlay: React.FC<{
                       type="button"
                       onClick={playAnswerAudio}
                       className="mt-3 inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold text-white transition-all hover:scale-105 active:scale-95 cursor-pointer shadow-lg"
-                      style={{ background: 'linear-gradient(135deg, #10b981, #06b6d4)', boxShadow: '0 4px 15px rgba(16,185,129,0.3)' }}
+                      style={{ background: 'linear-gradient(135deg, #10b981, #06b6d4)' }}
                     >
                       <Volume2 className={`w-4 h-4 ${answerAudioPlaying ? 'animate-bounce' : ''}`} />
                       <span>{answerAudioPlaying ? 'Playing Sound...' : '🔊 Replay Answer Audio'}</span>
@@ -2315,10 +2523,7 @@ const GamePlay: React.FC<{
                     <button
                       type="button"
                       onClick={() => setSelectedWinnerId('nobody')}
-                      className={`p-3 rounded-xl border-2 transition-all flex items-center justify-center gap-2 cursor-pointer ${selectedWinnerId === 'nobody'
-                        ? 'border-red-500 bg-red-500/20 text-red-300 shadow-[0_0_15px_rgba(239,68,68,0.3)] font-bold'
-                        : 'border-white/10 bg-white/5 text-white/70 hover:bg-white/10'
-                        }`}
+                      className={`p-3 rounded-xl border-2 transition-all flex items-center justify-center gap-2 cursor-pointer ${selectedWinnerId === 'nobody' ? 'border-red-500 bg-red-500/20 text-red-300 font-bold' : 'border-white/10 bg-white/5 text-white/70 hover:bg-white/10'}`}
                     >
                       <span className="text-lg">❌</span>
                       <span className="text-xs font-semibold">Nobody</span>
@@ -2333,10 +2538,7 @@ const GamePlay: React.FC<{
                           key={e.id}
                           type="button"
                           onClick={() => setSelectedWinnerId(e.id)}
-                          className={`p-3 rounded-xl border-2 transition-all flex items-center gap-2 cursor-pointer ${isSelected
-                            ? 'border-green-500 bg-green-500/20 text-white shadow-[0_0_15px_rgba(34,197,94,0.3)] font-bold'
-                            : 'border-white/10 bg-white/5 text-white/80 hover:bg-white/10'
-                            }`}
+                          className={`p-3 rounded-xl border-2 transition-all flex items-center gap-2 cursor-pointer ${isSelected ? 'border-green-500 bg-green-500/20 text-white font-bold' : 'border-white/10 bg-white/5 text-white/80 hover:bg-white/10'}`}
                         >
                           <span className="text-lg flex-shrink-0">{emoji}</span>
                           <span className="text-xs font-medium truncate">{e.name}</span>
@@ -2352,7 +2554,6 @@ const GamePlay: React.FC<{
                       background: 'linear-gradient(135deg, #a855f7, #ec4899)',
                       opacity: selectedWinnerId ? 1 : 0.4,
                       cursor: selectedWinnerId ? 'pointer' : 'not-allowed',
-                      boxShadow: selectedWinnerId ? '0 8px 25px rgba(168,85,247,0.3)' : 'none'
                     }}
                     onClick={() => {
                       if (selectedWinnerId) {
@@ -2365,7 +2566,7 @@ const GamePlay: React.FC<{
               </div>
             )}
 
-            {/* Live Scores Sidebar on Right Column */}
+            {/* Live Scores Sidebar */}
             <div className="bg-theme-card border border-theme-card rounded-2xl p-4" style={{ backdropFilter: 'blur(10px)' }}>
               <div className="flex items-center justify-between mb-3 pb-2 border-b border-white/10">
                 <h3 className="font-bold text-xs text-theme-main flex items-center gap-2">
@@ -2395,7 +2596,6 @@ const GamePlay: React.FC<{
           </div>
         </div>
       </div>
-
     </div>
   );
 };
@@ -2459,9 +2659,7 @@ const FeedbackModal: React.FC<{ open: boolean; onClose: () => void; currentScree
   return (
     <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center px-4 pb-4 sm:pb-0" style={{ background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(14px)' }} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="w-full max-w-lg rounded-3xl overflow-hidden shadow-2xl" style={{ background: 'linear-gradient(145deg, rgba(18,18,42,0.98), rgba(30,20,60,0.98))', border: '1px solid rgba(168,85,247,0.25)', maxHeight: '90vh', overflowY: 'auto' }}>
-        {/* Header with Navigation Tabs */}
         <div className="relative p-6 pb-4" style={{ background: 'linear-gradient(135deg, rgba(168,85,247,0.15), rgba(236,72,153,0.1))' }}>
-          <div className="absolute inset-0 opacity-30" style={{ backgroundImage: 'radial-gradient(circle at 20% 50%, rgba(168,85,247,0.3) 0%, transparent 50%), radial-gradient(circle at 80% 20%, rgba(236,72,153,0.2) 0%, transparent 50%)' }} />
           <div className="relative flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-2xl" style={{ background: 'linear-gradient(135deg, rgba(168,85,247,0.3), rgba(236,72,153,0.2))', border: '1px solid rgba(168,85,247,0.4)' }}>
@@ -2481,15 +2679,12 @@ const FeedbackModal: React.FC<{ open: boolean; onClose: () => void; currentScree
             </button>
           </div>
 
-          {/* Modal Navigation Tabs */}
           <div className="relative flex rounded-xl p-1 bg-black/30 border border-white/10">
             <button
               type="button"
               onClick={() => { setActiveModalTab('feedback'); setStatus('idle'); }}
               className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                activeModalTab === 'feedback'
-                  ? 'bg-purple-600/80 text-white shadow-md'
-                  : 'text-white/50 hover:text-white/80'
+                activeModalTab === 'feedback' ? 'bg-purple-600/80 text-white shadow-md' : 'text-white/50 hover:text-white/80'
               }`}
             >
               💬 Feedback
@@ -2498,9 +2693,7 @@ const FeedbackModal: React.FC<{ open: boolean; onClose: () => void; currentScree
               type="button"
               onClick={() => { setActiveModalTab('waitlist'); setStatus('idle'); }}
               className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                activeModalTab === 'waitlist'
-                  ? 'bg-gradient-to-r from-pink-500 to-purple-600 text-white shadow-md'
-                  : 'text-white/50 hover:text-white/80'
+                activeModalTab === 'waitlist' ? 'bg-gradient-to-r from-pink-500 to-purple-600 text-white shadow-md' : 'text-white/50 hover:text-white/80'
               }`}
             >
               🚀 Make Your Game
@@ -2515,28 +2708,23 @@ const FeedbackModal: React.FC<{ open: boolean; onClose: () => void; currentScree
               {activeModalTab === 'waitlist' ? "You're on the Waitlist!" : 'Thanks!'}
             </h3>
             <p className="text-white/60 text-sm">
-              {activeModalTab === 'waitlist'
-                ? "We'll notify you as soon as custom game creation goes live!"
-                : 'Your feedback has been sent successfully.'}
+              {activeModalTab === 'waitlist' ? "We'll notify you as soon as custom game creation goes live!" : 'Your feedback has been sent successfully.'}
             </p>
-            <div className="mt-4 text-4xl">✨</div>
           </div>
         ) : activeModalTab === 'feedback' ? (
           <form onSubmit={handleFeedbackSubmit} className="p-6 space-y-4">
-            {/* Name */}
             <div>
-              <label className="text-xs font-bold uppercase tracking-wider text-white/50 block mb-1.5">Your Name <span className="text-white/30 normal-case font-normal">(optional)</span></label>
+              <label className="text-xs font-bold uppercase tracking-wider text-white/50 block mb-1.5">Your Name <span className="text-white/30 font-normal">(optional)</span></label>
               <input
                 type="text"
                 value={name}
                 onChange={e => setName(e.target.value)}
                 placeholder="Anonymous Memer 🎭"
-                className="w-full px-4 py-3 rounded-xl text-sm text-white outline-none transition-all focus:ring-2 focus:ring-purple-500/50"
+                className="w-full px-4 py-3 rounded-xl text-sm text-white outline-none"
                 style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }}
               />
             </div>
 
-            {/* Category */}
             <div>
               <label className="text-xs font-bold uppercase tracking-wider text-white/50 block mb-1.5">Category</label>
               <div className="grid grid-cols-2 gap-2">
@@ -2547,7 +2735,6 @@ const FeedbackModal: React.FC<{ open: boolean; onClose: () => void; currentScree
                       background: category === cat ? 'linear-gradient(135deg, rgba(168,85,247,0.3), rgba(236,72,153,0.2))' : 'rgba(255,255,255,0.05)',
                       border: category === cat ? '1px solid rgba(168,85,247,0.5)' : '1px solid rgba(255,255,255,0.08)',
                       color: category === cat ? '#e879f9' : 'rgba(255,255,255,0.6)',
-                      boxShadow: category === cat ? '0 0 15px rgba(168,85,247,0.2)' : 'none',
                     }}>
                     {cat}
                   </button>
@@ -2555,22 +2742,21 @@ const FeedbackModal: React.FC<{ open: boolean; onClose: () => void; currentScree
               </div>
             </div>
 
-            {/* Message */}
             <div>
               <label className="text-xs font-bold uppercase tracking-wider text-white/50 block mb-1.5">Message <span className="text-red-400">*</span></label>
               <textarea
                 required
                 value={message}
                 onChange={e => setMessage(e.target.value)}
-                placeholder="Type your thoughts, suggestions, or the meme you'd love to see..."
+                placeholder="Type your thoughts..."
                 rows={4}
-                className="w-full px-4 py-3 rounded-xl text-sm text-white outline-none transition-all focus:ring-2 focus:ring-purple-500/50 resize-none"
+                className="w-full px-4 py-3 rounded-xl text-sm text-white outline-none resize-none"
                 style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }}
               />
             </div>
 
             {status === 'error' && (
-              <div className="p-3 rounded-xl text-sm text-red-300" style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.25)' }}>
+              <div className="p-3 rounded-xl text-sm text-red-300 bg-red-500/20 border border-red-500/30">
                 ⚠️ {errorMsg}
               </div>
             )}
@@ -2578,38 +2764,30 @@ const FeedbackModal: React.FC<{ open: boolean; onClose: () => void; currentScree
             <button
               type="submit"
               disabled={status === 'sending' || !message.trim()}
-              className="w-full py-4 rounded-xl font-bold text-white text-sm transition-all active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
-              style={{ background: 'linear-gradient(135deg, #a855f7, #ec4899)', boxShadow: '0 8px 25px rgba(168,85,247,0.35)' }}>
-              {status === 'sending' ? (
-                <><span className="animate-spin">⟳</span> Sending...</>
-              ) : (
-                <>✈️ Send Feedback</>
-              )}
+              className="w-full py-4 rounded-xl font-bold text-white text-sm transition-all cursor-pointer"
+              style={{ background: 'linear-gradient(135deg, #a855f7, #ec4899)' }}>
+              {status === 'sending' ? 'Sending...' : '✈️ Send Feedback'}
             </button>
           </form>
         ) : (
           <form onSubmit={handleWaitlistSubmit} className="p-6 space-y-4">
-            {/* Waitlist Banner */}
             <div className="p-4 rounded-2xl border border-pink-500/20 bg-pink-500/10 text-center">
-              <div className="text-2xl mb-1">✨</div>
-              <p className="text-xs font-bold text-pink-300">Want to create custom meme games for your friends or events?</p>
-              <p className="text-[11px] text-white/60 mt-1">Leave your details below and get early access when builder mode launches!</p>
+              <p className="text-xs font-bold text-pink-300">Want to create custom meme games?</p>
+              <p className="text-[11px] text-white/60 mt-1">Get early access when custom game builder launches!</p>
             </div>
 
-            {/* Name */}
             <div>
-              <label className="text-xs font-bold uppercase tracking-wider text-white/50 block mb-1.5">Your Name <span className="text-white/30 normal-case font-normal">(optional)</span></label>
+              <label className="text-xs font-bold uppercase tracking-wider text-white/50 block mb-1.5">Your Name</label>
               <input
                 type="text"
                 value={name}
                 onChange={e => setName(e.target.value)}
-                placeholder="Game Creator / Team Lead 🎮"
-                className="w-full px-4 py-3 rounded-xl text-sm text-white outline-none transition-all focus:ring-2 focus:ring-pink-500/50"
+                placeholder="Game Creator 🎮"
+                className="w-full px-4 py-3 rounded-xl text-sm text-white outline-none"
                 style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }}
               />
             </div>
 
-            {/* Email */}
             <div>
               <label className="text-xs font-bold uppercase tracking-wider text-white/50 block mb-1.5">Email Address <span className="text-red-400">*</span></label>
               <input
@@ -2618,27 +2796,17 @@ const FeedbackModal: React.FC<{ open: boolean; onClose: () => void; currentScree
                 value={email}
                 onChange={e => setEmail(e.target.value)}
                 placeholder="you@example.com"
-                className="w-full px-4 py-3 rounded-xl text-sm text-white outline-none transition-all focus:ring-2 focus:ring-pink-500/50"
+                className="w-full px-4 py-3 rounded-xl text-sm text-white outline-none"
                 style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }}
               />
             </div>
 
-            {status === 'error' && (
-              <div className="p-3 rounded-xl text-sm text-red-300" style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.25)' }}>
-                ⚠️ {errorMsg}
-              </div>
-            )}
-
             <button
               type="submit"
               disabled={status === 'sending' || !email.trim()}
-              className="w-full py-4 rounded-xl font-bold text-white text-sm transition-all active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
-              style={{ background: 'linear-gradient(135deg, #ec4899, #a855f7)', boxShadow: '0 8px 25px rgba(236,72,153,0.35)' }}>
-              {status === 'sending' ? (
-                <><span className="animate-spin">⟳</span> Joining Waitlist...</>
-              ) : (
-                <>🚀 Join Waitlist</>
-              )}
+              className="w-full py-4 rounded-xl font-bold text-white text-sm transition-all cursor-pointer"
+              style={{ background: 'linear-gradient(135deg, #ec4899, #a855f7)' }}>
+              {status === 'sending' ? 'Joining...' : '🚀 Join Waitlist'}
             </button>
           </form>
         )}
@@ -2647,7 +2815,7 @@ const FeedbackModal: React.FC<{ open: boolean; onClose: () => void; currentScree
   );
 };
 
-// ==================== SCOREBOARD ====================
+// ==================== SCOREBOARD WITH 10-QUESTION RULE & STRICT HIGHEST SCORE RANKING ====================
 const Scoreboard: React.FC<{
   scores: { players: Player[]; teams: Team[]; mode: GameMode };
   rounds: number;
@@ -2688,25 +2856,30 @@ const Scoreboard: React.FC<{
       supabase
         .from('scoreboard')
         .select('*')
-        .gte('rounds', 10)
-        .order('total_score', { ascending: false })
-        .limit(10)
+        .gte('rounds', 10) // STRICT RULE: Minimum 10 questions required for Hall of Fame qualification!
+        .order('total_score', { ascending: false }) // ORDER BY WINNER'S HIGHEST SCORE DESCENDING!
+        .limit(20)
         .then(({ data, error }) => {
           setHofLoading(false);
           if (error) {
-            console.error('[Hall of Fame] Supabase fetch error:', error.message, error.code, error.hint);
-            setHofError(`Database error: ${error.message}${error.hint ? ` — ${error.hint}` : ''}`);
+            console.error('[Hall of Fame] Fetch error:', error);
+            setHofError(`Database error: ${error.message}`);
           } else {
-            const validEntries = (data || []).filter((entry: any) => (entry.rounds ?? 0) >= 10);
-            setHallOfFame(validEntries);
+            // Guarantee Math-based ranking by highest winner score descending
+            const sortedHof = (data || []).map(entry => {
+              const results = entry.mode === 'team' ? (entry.team_results || []) : (entry.player_results || []);
+              const calculatedWinnerScore = results.length > 0
+                ? Math.max(...results.map((r: any) => r.score || 0))
+                : entry.total_score;
+              return { ...entry, calculatedWinnerScore };
+            }).sort((a, b) => b.calculatedWinnerScore - a.calculatedWinnerScore);
+
+            setHallOfFame(sortedHof);
           }
         });
     }
   }, [activeTab]);
 
-  const totalScore = scores.mode === 'team'
-    ? scores.teams.reduce((s, t) => s + t.score, 0)
-    : scores.players.reduce((s, p) => s + p.score, 0);
   const sorted = scores.mode === 'team'
     ? [...scores.teams].sort((a, b) => b.score - a.score)
     : [...scores.players].sort((a, b) => b.score - a.score);
@@ -2714,14 +2887,8 @@ const Scoreboard: React.FC<{
 
   const getMedal = (i: number) => i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`;
 
-  const formatDate = (iso: string) => {
-    try { return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); }
-    catch { return iso; }
-  };
-
   return (
     <div className="min-h-screen flex flex-col items-center justify-start px-4 py-6 relative overflow-hidden">
-      {/* Confetti */}
       {showConfetti && (
         <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
           {confettiPieces.map(p => (
@@ -2743,164 +2910,109 @@ const Scoreboard: React.FC<{
       )}
 
       <div className="max-w-2xl w-full relative z-10">
-        {/* Logo */}
         <div className="flex justify-center mb-5">
           <GuessWhatLogo size={56} />
         </div>
 
-        {/* Winner Banner */}
         {winner && (
           <div className="text-center mb-6 relative">
             <div className="inline-block relative">
               <div className="text-7xl mb-2" style={{ filter: 'drop-shadow(0 0 20px rgba(234,179,8,0.6))' }}>🏆</div>
-              <div className="absolute -top-1 -right-1 text-2xl">✨</div>
             </div>
             <h1 className="text-3xl sm:text-4xl font-black text-white mb-1">
               <span style={{ background: 'linear-gradient(135deg, #eab308, #f97316, #ec4899)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-                {winner.name} Wins!
+                {winner.name} Wins! ({winner.score} pts)
               </span>
             </h1>
             <p className="text-white/50 text-sm">🎉 Crowned the Meme Champion!</p>
           </div>
         )}
 
-        {/* Tabs */}
         <div className="flex gap-2 mb-5 p-1 rounded-2xl" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
           {([['match', '🎮 This Match'], ['halloffame', '🏆 Hall of Fame']] as const).map(([tab, label]) => (
             <button key={tab} onClick={() => setActiveTab(tab)}
-              className="flex-1 py-2.5 rounded-xl font-bold text-sm transition-all"
+              className="flex-1 py-2.5 rounded-xl font-bold text-sm transition-all cursor-pointer"
               style={{
                 background: activeTab === tab ? 'linear-gradient(135deg, #a855f7, #ec4899)' : 'transparent',
                 color: activeTab === tab ? 'white' : 'rgba(255,255,255,0.45)',
-                boxShadow: activeTab === tab ? '0 4px 15px rgba(168,85,247,0.35)' : 'none',
               }}>
               {label}
             </button>
           ))}
         </div>
 
-        {/* TAB: This Match */}
         {activeTab === 'match' && (
           <div>
-            {/* Rankings */}
-            <div className="rounded-2xl p-5 mb-4" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.09)', backdropFilter: 'blur(12px)' }}>
+            <div className="rounded-2xl p-5 mb-4 border border-white/10 bg-white/5 backdrop-blur-md">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="font-black text-white flex items-center gap-2">
-                  <span style={{ color: '#eab308' }}>⚡</span> Final Rankings
+                  <span style={{ color: '#eab308' }}>⚡</span> Final Standings
                 </h2>
-                <span className="text-xs px-3 py-1 rounded-full font-semibold" style={{ background: 'rgba(234,179,8,0.15)', color: '#eab308', border: '1px solid rgba(234,179,8,0.25)' }}>
-                  {totalScore} pts total
+                <span className="text-xs px-3 py-1 rounded-full font-semibold bg-yellow-500/20 text-yellow-300">
+                  {winner ? `${winner.score} Top Score` : '0 pts'}
                 </span>
               </div>
 
-              {sorted.length === 0 ? (
-                <div className="text-center py-8">
-                  <div className="text-4xl mb-3">🎯</div>
-                  <p className="text-white/40">No players or teams tracked.</p>
-                </div>
-              ) : (
-                <div className="space-y-2.5">
-                  {sorted.map((item, idx) => {
-                    const isTeam = 'emoji' in item;
-                    const teamItem = item as Team;
-                    const playerItem = item as Player;
-                    const itemColor = isTeam ? teamItem.color : '#a855f7';
-                    const barPct = sorted[0]?.score ? (item.score / sorted[0].score) * 100 : 0;
-                    const isWinner = idx === 0;
-
-                    return (
-                      <div key={item.id}
-                        className="p-4 rounded-xl flex items-center gap-3 transition-all"
-                        style={{
-                          background: isWinner
-                            ? `linear-gradient(135deg, rgba(234,179,8,0.12), rgba(249,115,22,0.08))`
-                            : 'rgba(255,255,255,0.03)',
-                          border: isWinner ? '1px solid rgba(234,179,8,0.35)' : '1px solid rgba(255,255,255,0.06)',
-                          boxShadow: isWinner ? '0 0 20px rgba(234,179,8,0.12)' : 'none',
-                        }}>
-
-                        {/* Medal / Rank */}
-                        <div className="w-10 text-center">
-                          <span className="text-2xl">{getMedal(idx)}</span>
-                        </div>
-
-                        {/* Avatar */}
-                        <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl shrink-0"
-                          style={{ background: `${itemColor}20`, border: `1px solid ${itemColor}40` }}>
-                          {isTeam ? teamItem.emoji : '👤'}
-                        </div>
-
-                        {/* Info */}
-                        <div className="flex-1 min-w-0">
-                          <p className="font-bold text-white truncate">{item.name}</p>
-                          <div className="flex items-center gap-2 mt-1">
-                            {!isTeam && playerItem.bestStreak >= 2 && (
-                              <span className="text-[10px] px-1.5 py-0.5 rounded-md font-bold" style={{ background: 'rgba(249,115,22,0.2)', color: '#f97316' }}>🔥 {playerItem.bestStreak}x</span>
-                            )}
-                            {!isTeam && playerItem.correctAnswers > 0 && (
-                              <span className="text-[10px] px-1.5 py-0.5 rounded-md font-bold" style={{ background: 'rgba(34,197,94,0.15)', color: '#22c55e' }}>✓ {playerItem.correctAnswers}/{playerItem.totalAnswers}</span>
-                            )}
-                          </div>
-                          <div className="mt-1.5 w-full h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.07)' }}>
-                            <div className="h-full rounded-full transition-all duration-700" style={{ width: `${barPct}%`, background: `linear-gradient(90deg, ${itemColor}, ${itemColor}88)`, boxShadow: `0 0 6px ${itemColor}60` }} />
-                          </div>
-                        </div>
-
-                        {/* Score */}
-                        <div className="text-right shrink-0">
-                          <p className="text-2xl font-black" style={{ color: itemColor, textShadow: `0 0 12px ${itemColor}60` }}>{item.score}</p>
-                          <p className="text-[10px] text-white/30">pts</p>
-                        </div>
-                      </div>
-                    );
-                  })}
+              {rounds < 10 && (
+                <div className="mb-4 p-3 rounded-xl bg-purple-500/10 border border-purple-500/20 text-xs text-purple-200 flex items-center gap-2">
+                  <span>ℹ️</span>
+                  <span>Notice: Only games with 10+ completed questions qualify for the All-Time Hall of Fame.</span>
                 </div>
               )}
-            </div>
 
-            {/* Game Stats */}
-            <div className="grid grid-cols-3 gap-3 mb-5">
-              {[
-                { val: rounds, label: 'Rounds', color: '#a855f7', icon: '🎯' },
-                { val: totalScore, label: 'Total Pts', color: '#ec4899', icon: '⚡' },
-                { val: `${timePerQ}s`, label: 'Per Q', color: '#22c55e', icon: '⏱️' },
-              ].map((s, i) => (
-                <div key={i} className="rounded-xl p-4 text-center" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                  <div className="text-lg mb-0.5">{s.icon}</div>
-                  <p className="text-xl font-black" style={{ color: s.color }}>{s.val}</p>
-                  <p className="text-[10px] text-white/40 mt-0.5">{s.label}</p>
-                </div>
-              ))}
-            </div>
+              <div className="space-y-2.5">
+                {sorted.map((item, idx) => {
+                  const isTeam = 'emoji' in item;
+                  const teamItem = item as Team;
+                  const playerItem = item as Player;
+                  const itemColor = isTeam ? teamItem.color : '#a855f7';
+                  const barPct = sorted[0]?.score ? (item.score / sorted[0].score) * 100 : 0;
+                  const isWinner = idx === 0;
 
-            {/* Feedback prompt */}
-            <div className="rounded-2xl p-4 mb-5 flex items-center gap-3 cursor-pointer transition-all hover:scale-[1.01] active:scale-[0.99]" style={{ background: 'linear-gradient(135deg, rgba(168,85,247,0.12), rgba(236,72,153,0.08))', border: '1px solid rgba(168,85,247,0.25)' }} onClick={onFeedback}>
-              <div className="text-2xl">💬</div>
-              <div className="flex-1">
-                <p className="font-bold text-white text-sm">Share your thoughts!</p>
-                <p className="text-xs text-white/50">Suggest a meme, report an issue, or just say hi.</p>
+                  return (
+                    <div key={item.id}
+                      className="p-4 rounded-xl flex items-center gap-3 transition-all"
+                      style={{
+                        background: isWinner ? `linear-gradient(135deg, rgba(234,179,8,0.12), rgba(249,115,22,0.08))` : 'rgba(255,255,255,0.03)',
+                        border: isWinner ? '1px solid rgba(234,179,8,0.35)' : '1px solid rgba(255,255,255,0.06)',
+                      }}>
+                      <div className="w-10 text-center">
+                        <span className="text-2xl">{getMedal(idx)}</span>
+                      </div>
+                      <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl shrink-0" style={{ background: `${itemColor}20`, border: `1px solid ${itemColor}40` }}>
+                        {isTeam ? teamItem.emoji : '👤'}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-bold text-white truncate">{item.name}</p>
+                        <div className="mt-1.5 w-full h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.07)' }}>
+                          <div className="h-full rounded-full transition-all duration-700" style={{ width: `${barPct}%`, background: `linear-gradient(90deg, ${itemColor}, ${itemColor}88)` }} />
+                        </div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="text-2xl font-black" style={{ color: itemColor }}>{item.score}</p>
+                        <p className="text-[10px] text-white/30">pts</p>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-              <span className="text-white/40 text-lg">›</span>
             </div>
 
-            {/* Action Buttons */}
             <div className="space-y-3">
               <button
-                className="w-full py-4 rounded-xl text-base font-black text-white flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
-                style={{ background: 'linear-gradient(135deg, #a855f7, #ec4899)', boxShadow: '0 8px 30px rgba(168,85,247,0.4)' }}
+                className="w-full py-4 rounded-xl text-base font-black text-white flex items-center justify-center gap-2 transition-all cursor-pointer"
+                style={{ background: 'linear-gradient(135deg, #a855f7, #ec4899)' }}
                 onClick={onPlayAgain}>
                 <RotateCcw className="w-5 h-5" /> Play Again
               </button>
               <div className="grid grid-cols-2 gap-3">
                 <button
-                  className="py-3 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
-                  style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.7)' }}
+                  className="py-3 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 cursor-pointer bg-white/5 border border-white/10 text-white/70"
                   onClick={onNewSetup}>
                   <Users className="w-4 h-4" /> New Setup
                 </button>
                 <button
-                  className="py-3 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
-                  style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.7)' }}
+                  className="py-3 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 cursor-pointer bg-white/5 border border-white/10 text-white/70"
                   onClick={onHome}>
                   <Home className="w-4 h-4" /> Home
                 </button>
@@ -2909,62 +3021,68 @@ const Scoreboard: React.FC<{
           </div>
         )}
 
-        {/* TAB: Hall of Fame */}
+        {/* HALL OF FAME TAB WITH STRICT HIGHEST WINNER SCORE SORTING */}
         {activeTab === 'halloffame' && (
           <div>
-            <div className="rounded-2xl p-5 mb-4" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.09)', backdropFilter: 'blur(12px)' }}>
-              <div className="flex items-center gap-2 mb-4">
-                <span className="text-xl">🌟</span>
-                <h2 className="font-black text-white">All-Time Leaderboard</h2>
+            <div className="rounded-2xl p-5 mb-4 border border-white/10 bg-white/5 backdrop-blur-md">
+              <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-xl">🌟</span>
+                  <h2 className="font-black text-white">All-Time Hall of Fame Leaderboard</h2>
+                </div>
+                <span className="text-[11px] px-2.5 py-1 rounded-full bg-purple-500/20 text-purple-300 font-semibold border border-purple-500/30">
+                  Matches with 10+ questions
+                </span>
               </div>
 
               {hofLoading ? (
                 <div className="flex flex-col items-center justify-center py-12 gap-3">
                   <div className="w-8 h-8 rounded-full border-2 border-purple-500 border-t-transparent animate-spin" />
-                  <p className="text-white/40 text-sm">Loading legends...</p>
+                  <p className="text-white/40 text-sm">Loading hall of fame...</p>
                 </div>
               ) : hofError ? (
-                <div className="py-6 text-center">
-                  <div className="text-4xl mb-3">⚠️</div>
-                  <p className="text-red-400 font-semibold text-sm mb-2">Database Error</p>
-                  <p className="text-red-300/70 text-xs leading-relaxed mb-4 px-2">{hofError}</p>
-                  <p className="text-white/40 text-xs">👆 Make sure you have run the Supabase SQL setup script.</p>
+                <div className="py-6 text-center text-xs text-red-300">
+                  ⚠️ {hofError}
                 </div>
               ) : hallOfFame.length === 0 ? (
                 <div className="text-center py-10">
                   <div className="text-5xl mb-3">🏜️</div>
-                  <p className="text-white/50 font-semibold">No records yet!</p>
-                  <p className="text-white/30 text-sm mt-1">Play a game to be the first legend.</p>
+                  <p className="text-white/50 font-semibold">No 10+ question match records yet!</p>
+                  <p className="text-xs text-white/30 mt-1">Play a game with at least 10 questions to enter the Hall of Fame.</p>
                 </div>
               ) : (
-
-                <div className="space-y-2.5">
+                <div className="space-y-3">
                   {hallOfFame.map((entry, idx) => {
                     const rankColors = ['#eab308', '#94a3b8', '#f97316'];
                     const rankColor = idx < 3 ? rankColors[idx] : 'rgba(255,255,255,0.4)';
-                    const results = entry.mode === 'team' ? (entry.team_results || []) : (entry.player_results || []);
-                    const topResult = results.sort ? [...results].sort((a: any, b: any) => b.score - a.score)[0] : null;
+                    const playerResults = entry.player_results || [];
+                    const teamResults = entry.team_results || [];
+                    const results = entry.mode === 'team' ? teamResults : playerResults;
+
+                    const scoreToDisplay = entry.calculatedWinnerScore || entry.total_score;
 
                     return (
-                      <div key={entry.id} className="p-4 rounded-xl" style={{ background: idx === 0 ? 'linear-gradient(135deg, rgba(234,179,8,0.12), rgba(249,115,22,0.08))' : 'rgba(255,255,255,0.03)', border: idx === 0 ? '1px solid rgba(234,179,8,0.3)' : '1px solid rgba(255,255,255,0.06)' }}>
+                      <div key={entry.id || idx} className="p-4 rounded-xl bg-white/5 border border-white/10 space-y-2">
                         <div className="flex items-center gap-3">
-                          <div className="w-10 text-center">
-                            <span className="text-xl">{getMedal(idx)}</span>
+                          <div className="w-8 text-center font-bold text-lg">
+                            {getMedal(idx)}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="font-bold text-white truncate">{entry.winner_name}</p>
-                            <p className="text-xs text-white/40"> {entry.rounds} rounds · {entry.mode}</p>
+                            <p className="font-bold text-white text-base truncate">{entry.winner_name}</p>
+                            <p className="text-xs text-white/40">{entry.rounds} questions · Mode: {entry.mode}</p>
                           </div>
                           <div className="text-right shrink-0">
-                            <p className="text-xl font-black" style={{ color: rankColor }}>{entry.total_score}</p>
-                            <p className="text-[10px] text-white/30">pts</p>
+                            <p className="text-xl font-black" style={{ color: rankColor }}>{scoreToDisplay} pts</p>
+                            <p className="text-[10px] text-white/40">Winner Score</p>
                           </div>
                         </div>
-                        {topResult && (
-                          <div className="mt-2 ml-13 flex items-center gap-1.5 flex-wrap">
-                            {results.slice(0, 3).map((r: any) => (
-                              <span key={r.name} className="text-[10px] px-2 py-0.5 rounded-full" style={{ background: 'rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.55)', border: '1px solid rgba(255,255,255,0.1)' }}>
-                                {r.emoji ? `${r.emoji} ` : ''}{r.name}: {r.score}pts
+
+                        {/* Individual Player/Team Scores Breakdown */}
+                        {results && results.length > 0 && (
+                          <div className="pt-2 border-t border-white/5 flex items-center gap-1.5 flex-wrap">
+                            {results.map((r: any, rIdx: number) => (
+                              <span key={rIdx} className="text-[11px] px-2.5 py-1 rounded-lg bg-white/5 border border-white/10 text-white/80 font-medium">
+                                {r.emoji ? `${r.emoji} ` : '👤 '}{r.name}: <strong className="text-purple-300">{r.score} pts</strong>
                               </span>
                             ))}
                           </div>
@@ -2978,21 +3096,19 @@ const Scoreboard: React.FC<{
 
             <div className="space-y-3">
               <button
-                className="w-full py-4 rounded-xl text-base font-black text-white flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
-                style={{ background: 'linear-gradient(135deg, #a855f7, #ec4899)', boxShadow: '0 8px 30px rgba(168,85,247,0.4)' }}
+                className="w-full py-4 rounded-xl text-base font-black text-white flex items-center justify-center gap-2 transition-all cursor-pointer"
+                style={{ background: 'linear-gradient(135deg, #a855f7, #ec4899)' }}
                 onClick={onPlayAgain}>
                 <RotateCcw className="w-5 h-5" /> Play Again
               </button>
               <div className="grid grid-cols-2 gap-3">
                 <button
-                  className="py-3 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
-                  style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.7)' }}
+                  className="py-3 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 cursor-pointer bg-white/5 border border-white/10 text-white/70"
                   onClick={onNewSetup}>
                   <Users className="w-4 h-4" /> New Setup
                 </button>
                 <button
-                  className="py-3 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
-                  style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.7)' }}
+                  className="py-3 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 cursor-pointer bg-white/5 border border-white/10 text-white/70"
                   onClick={onHome}>
                   <Home className="w-4 h-4" /> Home
                 </button>
@@ -3044,7 +3160,6 @@ const AdminLogin: React.FC<{
       <div className="max-w-md w-full rounded-2xl p-6 sm:p-8 shadow-2xl relative border border-theme-card bg-theme-card"
         style={{ backdropFilter: 'blur(10px)' }}>
 
-        {/* Back Button */}
         <button onClick={onBack} className="absolute top-6 left-6 w-10 h-10 rounded-xl flex items-center justify-center hover:bg-white/10 transition-colors border border-theme-card bg-theme-card">
           <span className="text-xl">⬅️</span>
         </button>
@@ -3054,7 +3169,7 @@ const AdminLogin: React.FC<{
             <GuessWhatLogo size={48} />
           </div>
           <h1 className="text-3xl font-black mb-2"><GradientText>Admin Login</GradientText></h1>
-          <p className="text-sm text-theme-muted" style={{ color: 'var(--text-muted)' }}>Sign in to manage game content</p>
+          <p className="text-sm text-theme-muted">Sign in to manage game content</p>
         </div>
 
         {error && (
@@ -3065,7 +3180,7 @@ const AdminLogin: React.FC<{
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="text-xs font-semibold uppercase tracking-wider block mb-1.5" style={{ color: 'var(--text-muted)' }}>Email Address</label>
+            <label className="text-xs font-semibold uppercase tracking-wider block mb-1.5">Email Address</label>
             <input
               type="email"
               required
@@ -3077,7 +3192,7 @@ const AdminLogin: React.FC<{
           </div>
 
           <div>
-            <label className="text-xs font-semibold uppercase tracking-wider block mb-1.5" style={{ color: 'var(--text-muted)' }}>Password</label>
+            <label className="text-xs font-semibold uppercase tracking-wider block mb-1.5">Password</label>
             <input
               type="password"
               required
@@ -3107,10 +3222,13 @@ const App: React.FC = () => {
   const [screen, setScreen] = useState<GameScreen>('loading');
   const screenRef = useRef<GameScreen>('loading');
   const [content, setContent] = useState<GameContent[]>([]);
+  const [questionTypes, setQuestionTypes] = useState<CustomQuestionType[]>(DEFAULT_QUESTION_TYPES);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [showFeedback, setShowFeedback] = useState(false);
 
-  const isExitingRef = useRef(false);
+  // Mobile Buzzer Route Check
+  const [isMobileBuzzerRoute, setIsMobileBuzzerRoute] = useState(false);
+  const [mobileParams, setMobileParams] = useState<{ code: string; teamId?: string; teamName?: string; teamEmoji?: string }>({ code: '' });
 
   const [isDark] = useState(true);
   const toggleTheme = () => { };
@@ -3119,37 +3237,38 @@ const App: React.FC = () => {
   const [adminEmail, setAdminEmail] = useState<string | null>(null);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
 
-  // Keep screenRef in sync with screen so popstate handler has current value
+  useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search);
+    const session = searchParams.get('session') || searchParams.get('join');
+    if (session) {
+      setIsMobileBuzzerRoute(true);
+      setMobileParams({
+        code: session,
+        teamId: searchParams.get('team') || undefined,
+        teamName: searchParams.get('teamName') || undefined,
+        teamEmoji: searchParams.get('teamEmoji') || undefined,
+      });
+    }
+  }, []);
+
   const navigateToScreen = (s: GameScreen) => {
     screenRef.current = s;
     setScreen(s);
-    // Push a new history entry so back button has something to intercept
     window.history.pushState({ screen: s }, '', window.location.href);
   };
 
-  // Back-button / device back button interception
   useEffect(() => {
-    // Seed the initial history entry
     window.history.replaceState({ screen: 'loading' }, '', window.location.href);
 
     const handlePopState = () => {
-      if (isExitingRef.current) return;
       const currentScreen = screenRef.current;
-
-      // For active gameplay, intercept back and show exit game confirm
       if (currentScreen === 'playing' || currentScreen === 'reveal') {
-        // Re-push the current state so next back press triggers again
         window.history.pushState({ screen: currentScreen }, '', window.location.href);
         setShowExitConfirm(true);
         return;
       }
+      if (currentScreen === 'home') return;
 
-      // For home screen, do not intercept back - let the device/browser exit naturally
-      if (currentScreen === 'home') {
-        return;
-      }
-
-      // Parent screen map for all other screens
       const parentMap: Partial<Record<GameScreen, GameScreen>> = {
         'admin-login': 'home',
         'admin': 'home',
@@ -3194,19 +3313,22 @@ const App: React.FC = () => {
 
   const navigate = (s: GameScreen) => navigateToScreen(s);
 
-  // Save game results to Supabase scoreboard table
+  // Save game results to Supabase scoreboard table with 10-Question Eligibility Enforcement
   const saveGameResults = async (players: Player[], teams: Team[], mode: GameMode, numRounds: number, totalScore: number, winnerName: string) => {
-    // Only games with at least 10 questions are eligible for Hall of Fame
+    // 10-QUESTION ELIGIBILITY RULE
     if (numRounds < 10) {
-      console.log('[saveGameResults] Skipping save to scoreboard as total questions played is less than 10:', numRounds);
+      console.log(`[saveGameResults] Match ended with ${numRounds} questions. Minimum 10 questions required to qualify for Hall of Fame.`);
       return;
     }
 
-    // Build insert payload
+    const allEntities = mode === 'team' ? teams : players;
+    const sorted = [...allEntities].sort((a, b) => b.score - a.score);
+    const winnerScore = sorted[0]?.score || 0;
+
     const payload = {
       mode,
       rounds: numRounds,
-      total_score: totalScore,
+      total_score: winnerScore, // Winner highest score
       winner_name: winnerName,
       player_results: mode === 'individual'
         ? players.map(p => ({ name: p.name, score: p.score, streak: p.streak, bestStreak: p.bestStreak, correctAnswers: p.correctAnswers, totalAnswers: p.totalAnswers }))
@@ -3216,14 +3338,36 @@ const App: React.FC = () => {
         : null,
     };
 
-    console.log('[saveGameResults] Attempting to insert scoreboard record:', payload);
-
+    console.log('[saveGameResults] Inserting scoreboard record:', payload);
     const { data, error } = await supabase.from('scoreboard').insert([payload]).select();
-
     if (error) {
-      console.error('[saveGameResults] Supabase insert error:', error.message, error.details, error.hint, error.code);
-    } else {
-      console.log('[saveGameResults] Successfully saved scoreboard record:', data);
+      console.error('[saveGameResults] Supabase insert error:', error.message);
+    }
+  };
+
+  const refreshQuestionTypes = async () => {
+    try {
+      const { data, error } = await supabase.from('question_types').select('*').order('created_at', { ascending: true });
+      if (error) {
+        if (error.message?.includes('schema cache') || error.message?.includes('does not exist')) {
+          console.warn('Supabase question_types table missing, using default types.');
+          return;
+        }
+        throw error;
+      }
+      if (data && data.length > 0) {
+        const mapped: CustomQuestionType[] = data.map(item => ({
+          id: item.id,
+          key: item.key,
+          label: item.label,
+          icon: item.icon || '🎯',
+          color: item.color || '#a855f7',
+          isSystem: item.is_system || false,
+        }));
+        setQuestionTypes(mapped);
+      }
+    } catch (err) {
+      console.warn('Could not fetch custom question types:', err);
     }
   };
 
@@ -3235,10 +3379,7 @@ const App: React.FC = () => {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-
-      if (data) {
-        setContent(data.map(mapFromDb));
-      }
+      if (data) { setContent(data.map(mapFromDb)); }
     } catch (err: any) {
       console.error('Error fetching game content from Supabase:', err);
       setFetchError(err.message || 'Failed to load content from Supabase.');
@@ -3248,12 +3389,13 @@ const App: React.FC = () => {
 
   useEffect(() => {
     refreshContent();
+    refreshQuestionTypes();
   }, []);
 
   const handleStartGame = (settings: any) => {
     setGameSettings(settings);
     const filtered = content.filter((c: GameContent) =>
-      settings.categories.includes(c.type) && settings.questionTypes.includes(c.questionType || 'multiple-choice')
+      settings.categories.includes(c.type)
     );
     const questionLimit = settings.playUnlimited ? filtered.length : settings.rounds;
     const shuffled = shuffle(filtered).slice(0, questionLimit);
@@ -3275,8 +3417,6 @@ const App: React.FC = () => {
     });
     navigateToScreen('lobby');
   };
-
-  const handleReveal = () => navigateToScreen('reveal');
 
   const handleNext = (winnerId: string | 'nobody') => {
     const q = gameState.currentQuestion;
@@ -3303,13 +3443,18 @@ const App: React.FC = () => {
       setGameStats(stats);
       setGameState(prev => ({ ...prev, players: updatedPlayers, teams: updatedTeams }));
 
-      // Save to Supabase
       const finalMode: GameMode = gameSettings?.mode || 'individual';
       const allEntities = finalMode === 'team' ? updatedTeams : updatedPlayers;
       const sorted = [...allEntities].sort((a, b) => b.score - a.score);
       const winnerName = sorted[0]?.name || 'Unknown';
       const totalScore = sorted.reduce((s, e) => s + e.score, 0);
       saveGameResults(updatedPlayers, updatedTeams, finalMode, gameState.questions.length, totalScore, winnerName);
+
+      if (gameSettings?.sessionId) {
+        supabase.channel(`session_${gameSettings.sessionId.toUpperCase()}`).send({
+          type: 'broadcast', event: 'session_status', payload: { status: 'ended' }
+        });
+      }
 
       navigateToScreen('scoreboard');
     } else {
@@ -3329,13 +3474,18 @@ const App: React.FC = () => {
     setGameStats(stats);
     setShowExitConfirm(false);
 
-    // Save partial results to Supabase
     const finalMode: GameMode = gameSettings?.mode || 'individual';
     const allEntities = finalMode === 'team' ? gameState.teams : gameState.players;
     const sorted = [...allEntities].sort((a, b) => b.score - a.score);
     const winnerName = sorted[0]?.name || 'Unknown';
     const totalScore = sorted.reduce((s, e) => s + e.score, 0);
-    saveGameResults(gameState.players, gameState.teams, finalMode, gameState.currentIdx + 1, totalScore, winnerName);
+    saveGameResults(gameState.players, gameState.teams, finalMode, gameState.currentIdx, totalScore, winnerName);
+
+    if (gameSettings?.sessionId) {
+      supabase.channel(`session_${gameSettings.sessionId.toUpperCase()}`).send({
+        type: 'broadcast', event: 'session_status', payload: { status: 'ended' }
+      });
+    }
 
     navigateToScreen('scoreboard');
   };
@@ -3344,7 +3494,7 @@ const App: React.FC = () => {
     if (!gameSettings) return;
 
     const filtered = content.filter((c: GameContent) =>
-      gameSettings.categories.includes(c.type) && gameSettings.questionTypes.includes(c.questionType || 'multiple-choice')
+      gameSettings.categories.includes(c.type)
     );
     const questionLimit = gameSettings.playUnlimited ? filtered.length : gameSettings.rounds;
     const shuffled = shuffle(filtered).slice(0, questionLimit);
@@ -3384,16 +3534,22 @@ const App: React.FC = () => {
     ? Math.min(gameState.currentIdx + 1, gameState.questions.length)
     : (gameSettings?.rounds || 0);
 
-  // Show FAB only on home screen — NOT on scoreboard (scoreboard has inline feedback prompt
-  // and the FAB at bottom-right covers the Home button on mobile per common_mistakes_to_avoid.md §1)
-  const showFAB = screen === 'home' && !showFeedback;
+  const showFAB = screen === 'home' && !showFeedback && !isMobileBuzzerRoute;
+
+  if (isMobileBuzzerRoute) {
+    return (
+      <MobileBuzzerView
+        sessionCode={mobileParams.code}
+        teamIdFromUrl={mobileParams.teamId}
+        teamNameFromUrl={mobileParams.teamName}
+        teamEmojiFromUrl={mobileParams.teamEmoji}
+      />
+    );
+  }
 
   return (
     <AnimatedBg isDark={isDark}>
-      {/* Feedback Modal */}
       <FeedbackModal open={showFeedback} onClose={() => setShowFeedback(false)} currentScreen={screen} />
-
-
 
       <AlertModal open={alertInfo.open} title={alertInfo.title} message={alertInfo.message} onOk={() => setAlertInfo({ open: false, title: '', message: '' })} />
       <ConfirmModal
@@ -3425,17 +3581,29 @@ const App: React.FC = () => {
       />}
       {screen === 'admin' && <AdminScreen
         content={content}
+        questionTypes={questionTypes}
         onRefresh={refreshContent}
+        onRefreshTypes={refreshQuestionTypes}
         onBack={() => navigate('home')}
         isDark={isDark}
         onToggleTheme={toggleTheme}
         onLogout={handleLogout}
         adminEmail={adminEmail}
       />}
-      {screen === 'setup' && <GameSetup onBack={() => navigate('home')} onStart={handleStartGame} isDark={isDark} onToggleTheme={toggleTheme} />}
+      {screen === 'setup' && <GameSetup questionTypes={questionTypes} onBack={() => navigate('home')} onStart={handleStartGame} isDark={isDark} onToggleTheme={toggleTheme} />}
       {screen === 'lobby' && gameSettings && <GameLobby settings={gameSettings} onStart={() => navigateToScreen('playing')} onBack={() => navigate('setup')} isDark={isDark} onToggleTheme={toggleTheme} />}
       {screen === 'playing' && gameState.currentQuestion && (
-        <GamePlay question={gameState.currentQuestion} roundNumber={gameState.currentIdx + 1} totalRounds={gameState.questions.length} onNext={handleNext} onExit={() => setShowExitConfirm(true)} players={gameState.players} teams={gameState.teams} mode={gameSettings?.mode || 'individual'} />
+        <GamePlay
+          question={gameState.currentQuestion}
+          roundNumber={gameState.currentIdx + 1}
+          totalRounds={gameState.questions.length}
+          onNext={handleNext}
+          onExit={() => setShowExitConfirm(true)}
+          players={gameState.players}
+          teams={gameState.teams}
+          mode={gameSettings?.mode || 'individual'}
+          sessionId={gameSettings?.sessionId}
+        />
       )}
       {screen === 'scoreboard' && (
         <Scoreboard scores={{ players: gameState.players, teams: gameState.teams, mode: gameSettings?.mode || 'individual' }} rounds={scorecardRounds} timePerQ={gameSettings?.timePerQ || 30} onPlayAgain={handlePlayAgain} onNewSetup={handleNewSetup} onHome={() => navigate('home')} isDark={isDark} onToggleTheme={toggleTheme} onFeedback={() => setShowFeedback(true)} />
@@ -3448,12 +3616,11 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* Floating Feedback Button (FAB) */}
       {showFAB && (
         <button
           id="feedback-fab"
           onClick={() => setShowFeedback(true)}
-          className="fixed z-[150] flex items-center gap-2 font-bold text-white transition-all active:scale-95 hover:scale-105 select-none"
+          className="fixed z-[150] flex items-center gap-2 font-bold text-white transition-all active:scale-95 hover:scale-105 select-none cursor-pointer"
           style={{
             bottom: '20px',
             right: '16px',
