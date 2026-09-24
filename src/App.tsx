@@ -3,6 +3,7 @@ import { supabase } from './supabaseClient';
 import logoImg from '../Logo/logo.png';
 import { getQRCodeUrl } from './utils/qr';
 import { MobileBuzzerView } from './components/MobileBuzzerView';
+import { TvFullscreenButton } from './components/TvFullscreenButton';
 import {
   ArrowLeft,
   Edit3,
@@ -293,7 +294,7 @@ const AnimatedBg: React.FC<{ children: React.ReactNode; isDark: boolean }> = ({ 
         #f1f5f9
       `
     }} />
-    <div className="relative z-10">{children}</div>
+    <div className="relative z-10 w-full h-full min-h-screen">{children}</div>
   </div>
 );
 
@@ -574,8 +575,9 @@ const HomeScreen: React.FC<{
   onToggleTheme: () => void;
 }> = ({ onNavigate, stats, isDark, onToggleTheme }) => {
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-6 py-12 relative">
-      <div className="absolute top-6 right-6 flex items-center gap-3 z-50">
+    <div className="min-h-screen flex flex-col items-center justify-center px-4 sm:px-6 py-6 sm:py-12 relative landscape-compact-py">
+      <div className="absolute top-4 sm:top-6 right-4 sm:right-6 flex items-center gap-2 sm:gap-3 z-50">
+        <TvFullscreenButton />
         <button
           onClick={() => onNavigate('admin')}
           className="p-3 rounded-xl flex items-center gap-2 hover:scale-105 transition-all shadow-lg cursor-pointer border border-theme-card bg-theme-card"
@@ -593,22 +595,23 @@ const HomeScreen: React.FC<{
         { e: '🏆', style: { top: '15%', left: '15%' } },
         { e: '⭐', style: { bottom: '20%', right: '15%' } },
       ].map((item, i) => (
-        <div key={i} className="absolute text-4xl sm:text-5xl opacity-10"
+        <div key={i} className="absolute text-4xl sm:text-5xl opacity-10 landscape-hide-floating-decor"
           style={{ ...item.style, animation: `float 6s ease-in-out infinite`, animationDelay: `${i * 0.5}s` }}>
           {item.e}
         </div>
       ))}
 
-      <div className="text-center mb-12">
-        <div className="flex justify-center mb-4">
+      <div className="text-center mb-6 sm:mb-12">
+        <div className="flex justify-center mb-2 sm:mb-4">
           <GuessWhatLogo
             size={110}
+            className="landscape-compact-logo"
             style={{
               animation: 'logoEntrance 1s cubic-bezier(0.34, 1.56, 0.64, 1) forwards, logoFloat 6s ease-in-out infinite 1s'
             }}
           />
         </div>
-        <h1 className="text-5xl sm:text-7xl font-black mb-3 tracking-tight">
+        <h1 className="text-4xl sm:text-7xl landscape-compact-title font-black mb-2 sm:mb-3 tracking-tight">
           <span style={{
             background: 'linear-gradient(135deg, #3b82f6, #06b6d4)',
             WebkitBackgroundClip: 'text',
@@ -627,23 +630,23 @@ const HomeScreen: React.FC<{
             What?
           </span>
         </h1>
-        <p className="text-lg max-w-md mx-auto font-light text-white/70">
+        <p className="text-sm sm:text-lg landscape-compact-subtitle max-w-md mx-auto font-light text-white/70">
           Can you guess this <TypewriterText words={['meme', 'movie', 'song']} interval={2500} />?
         </p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full max-w-2xl mb-10">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 w-full max-w-2xl mb-6 sm:mb-10">
         {[
-          { icon: <span className="text-3xl">🎮</span>, title: 'Play Game', desc: 'Start session & join with mobile QR', action: () => onNavigate('setup') },
-          { icon: <span className="text-3xl">🏆</span>, title: 'Scoreboard', desc: 'View scores & legends', action: () => onNavigate('scoreboard') },
+          { icon: <span className="text-2xl sm:text-3xl">🎮</span>, title: 'Play Game', desc: 'Start session & join with mobile QR', action: () => onNavigate('setup') },
+          { icon: <span className="text-2xl sm:text-3xl">🏆</span>, title: 'Scoreboard', desc: 'View scores & legends', action: () => onNavigate('scoreboard') },
         ].map((item, i) => (
-          <div key={i} onClick={item.action} className="rounded-2xl p-6 text-center cursor-pointer hover:-translate-y-2 transition-all duration-300 border border-theme-card bg-theme-card"
+          <div key={i} onClick={item.action} className="rounded-2xl p-4 sm:p-6 landscape-compact-card text-center cursor-pointer hover:-translate-y-2 transition-all duration-300 border border-theme-card bg-theme-card"
             style={{ backdropFilter: 'blur(10px)' }}>
-            <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-3" style={{ background: 'var(--input-bg)', border: '1px solid var(--input-border)' }}>
+            <div className="w-11 h-11 sm:w-14 sm:h-14 landscape-compact-card-icon rounded-2xl flex items-center justify-center mx-auto mb-2 sm:mb-3" style={{ background: 'var(--input-bg)', border: '1px solid var(--input-border)' }}>
               {item.icon}
             </div>
-            <h3 className="font-bold text-lg mb-1">{item.title}</h3>
-            <p className="text-sm text-white/40">{item.desc}</p>
+            <h3 className="font-bold text-base sm:text-lg mb-1">{item.title}</h3>
+            <p className="text-xs sm:text-sm text-white/40">{item.desc}</p>
           </div>
         ))}
       </div>
@@ -2065,6 +2068,7 @@ const GameSetup: React.FC<{
               <p className="text-white/40 text-sm">Configure session & QR mobile buzzers</p>
             </div>
           </div>
+          <TvFullscreenButton variant="compact" />
         </div>
 
         {/* SESSION ID DISPLAY & GENERAL QR CODE */}
@@ -2339,7 +2343,7 @@ const GameLobby: React.FC<{
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 py-8 relative">
+    <div className="min-h-screen flex items-center justify-center px-4 py-4 sm:py-8 relative landscape-compact-py">
       {countdown !== null && (
         <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(10px)' }}>
           <div style={{ fontSize: '10rem', fontWeight: 900, background: 'linear-gradient(135deg, #a855f7, #ec4899, #3b82f6)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
@@ -2348,13 +2352,19 @@ const GameLobby: React.FC<{
         </div>
       )}
       <div className="max-w-xl w-full">
-        <div className="text-center mb-6 flex flex-col items-center">
-          <GuessWhatLogo size={64} style={{ animation: 'pulse 2s cubic-bezier(0.4,0,0.6,1) infinite' }} />
+        <div className="flex items-center justify-between mb-3 w-full">
+          <button onClick={onBack} className="text-white/60 hover:text-white text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 cursor-pointer">
+            ⬅️ Back
+          </button>
+          <TvFullscreenButton variant="compact" />
+        </div>
+        <div className="text-center mb-4 sm:mb-6 flex flex-col items-center">
+          <GuessWhatLogo size={64} className="landscape-compact-logo" style={{ animation: 'pulse 2s cubic-bezier(0.4,0,0.6,1) infinite' }} />
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-mono font-bold text-purple-300 mb-2 border border-purple-500/30 bg-purple-500/15">
             🎮 SESSION ID: {settings.sessionId}
           </div>
-          <h1 className="text-4xl sm:text-5xl font-black mb-2">{settings.mode === 'team' ? '⚔️ Team Battle' : '🎮 Game On!'}</h1>
-          <p className="text-white/40">Scan barcodes below to connect phones as live buzzers</p>
+          <h1 className="text-3xl sm:text-5xl landscape-compact-title font-black mb-1 sm:mb-2">{settings.mode === 'team' ? '⚔️ Team Battle' : '🎮 Game On!'}</h1>
+          <p className="text-xs sm:text-sm landscape-compact-subtitle text-white/40">Scan barcodes below to connect phones as live buzzers</p>
         </div>
 
         <div className="rounded-2xl p-6 mb-6 border border-white/10 bg-white/5 text-center">
@@ -2660,6 +2670,7 @@ const GamePlay: React.FC<{
             )}
           </div>
           <div className="flex items-center gap-2">
+            <TvFullscreenButton variant="compact" />
             <button onClick={onExit} className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold text-red-400 hover:text-red-300 transition-colors bg-red-500/10 border border-red-500/20">
               🚪 Exit Game
             </button>
@@ -2694,22 +2705,22 @@ const GamePlay: React.FC<{
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        <div className="grid grid-cols-1 lg:grid-cols-12 landscape:grid-cols-12 gap-3 lg:gap-6 items-start">
           {/* Left Column: Question & Media */}
-          <div className="lg:col-span-8 space-y-5">
+          <div className="lg:col-span-8 landscape:col-span-7 space-y-3 lg:space-y-5">
             <div className="w-full h-1.5 rounded-full mb-2 bg-white/10 overflow-hidden">
               <div className="h-full rounded-full transition-all duration-500 bg-gradient-to-r from-purple-500 to-pink-500" style={{ width: `${progress}%` }} />
             </div>
 
-            <div className="rounded-2xl p-6 lg:p-10 border border-theme-card bg-theme-card shadow-xl" style={{ backdropFilter: 'blur(10px)' }}>
+            <div className="rounded-2xl p-4 sm:p-6 lg:p-10 border border-theme-card bg-theme-card shadow-xl" style={{ backdropFilter: 'blur(10px)' }}>
               {question.imageData && (
                 <div className="mb-4 rounded-xl overflow-hidden flex items-center justify-center bg-black/10 border border-theme-card">
-                  <ImageWithSpinner src={question.imageData} alt="question" className="max-w-full max-h-[45vh] lg:max-h-[55vh] object-contain rounded-xl shadow-md" />
+                  <ImageWithSpinner src={question.imageData} alt="question" className="max-w-full max-h-[38vh] lg:max-h-[55vh] landscape:max-h-[42dvh] object-contain rounded-xl shadow-md" />
                 </div>
               )}
               {question.videoData && (
                 <div className="mb-4 rounded-xl overflow-hidden bg-black/10 border border-theme-card">
-                  <video src={question.videoData} controls className="w-full max-h-[45vh] lg:max-h-[55vh] object-contain rounded-xl shadow-md" />
+                  <video src={question.videoData} controls className="w-full max-h-[38vh] lg:max-h-[55vh] landscape:max-h-[42dvh] object-contain rounded-xl shadow-md" />
                 </div>
               )}
               {(question.audioData || question.audioUrl) && (
@@ -2794,7 +2805,7 @@ const GamePlay: React.FC<{
           </div>
 
           {/* Right Column: Answer Reveal & Host Player Selection */}
-          <div className="lg:col-span-4 space-y-5">
+          <div className="lg:col-span-4 landscape:col-span-5 space-y-3 lg:space-y-5">
             {!isRevealed ? (
               <div className="rounded-2xl p-8 text-center border border-white/10 bg-white/5 backdrop-blur-md flex flex-col items-center justify-center min-h-[220px]">
                 <div className="text-5xl mb-4">🔒</div>
@@ -3199,7 +3210,7 @@ const Scoreboard: React.FC<{
   const getMedal = (i: number) => i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`;
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-start px-4 py-6 relative overflow-hidden">
+    <div className="min-h-screen flex flex-col items-center justify-start px-4 py-4 sm:py-6 relative overflow-hidden landscape-compact-py">
       {showConfetti && (
         <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
           {confettiPieces.map(p => (
@@ -3221,8 +3232,12 @@ const Scoreboard: React.FC<{
       )}
 
       <div className="max-w-2xl w-full relative z-10">
-        <div className="flex justify-center mb-5">
-          <GuessWhatLogo size={56} />
+        <div className="flex items-center justify-between mb-4">
+          <button onClick={onHome} className="text-white/60 hover:text-white text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 cursor-pointer">
+            🏠 Home
+          </button>
+          <GuessWhatLogo size={52} className="landscape-compact-logo" />
+          <TvFullscreenButton variant="compact" />
         </div>
 
         {winner && (
@@ -3878,67 +3893,71 @@ const App: React.FC = () => {
         onConfirm={confirmExitGame}
       />
 
-      {screen === 'loading' && <LoadingScreen onComplete={() => { screenRef.current = 'home'; setScreen('home'); window.history.replaceState({ screen: 'home' }, '', window.location.href); }} />}
-      {screen === 'home' && <HomeScreen
-        onNavigate={(s) => {
-          if (s === 'admin') {
-            if (isAdmin) { navigate('admin'); } else { navigate('admin-login'); }
-          } else {
-            navigate(s);
-          }
-        }}
-        stats={{ total: content.length, games: gameStats.gamesPlayed }}
-        isDark={isDark}
-        onToggleTheme={toggleTheme}
-      />}
-      {screen === 'admin-login' && <AdminLogin
-        onLoginSuccess={() => { setIsAdmin(true); navigate('admin'); }}
-        onBack={() => navigate('home')}
-      />}
-      {screen === 'admin' && <AdminScreen
-        content={content}
-        questionTypes={questionTypes}
-        onRefresh={refreshContent}
-        onRefreshTypes={refreshQuestionTypes}
-        onBack={() => navigate('home')}
-        isDark={isDark}
-        onToggleTheme={toggleTheme}
-        onLogout={handleLogout}
-        adminEmail={adminEmail}
-      />}
-      {screen === 'setup' && <GameSetup questionTypes={questionTypes} onBack={() => navigate('home')} onStart={handleStartGame} isDark={isDark} onToggleTheme={toggleTheme} />}
-      {screen === 'lobby' && gameSettings && (
-        <GameLobby
-          settings={gameSettings}
-          onStart={() => navigateToScreen('playing')}
-          onBack={() => navigate('setup')}
-          isDark={isDark}
-          onToggleTheme={toggleTheme}
-          onUpdatePlayers={(updated) => setGameState(prev => ({ ...prev, players: updated }))}
-        />
-      )}
-      {screen === 'playing' && gameState.currentQuestion && (
-        <GamePlay
-          question={gameState.currentQuestion}
-          roundNumber={gameState.currentIdx + 1}
-          totalRounds={gameState.questions.length}
-          onNext={handleNext}
-          onExit={() => setShowExitConfirm(true)}
-          players={gameState.players}
-          teams={gameState.teams}
-          mode={gameSettings?.mode || 'individual'}
-          sessionId={gameSettings?.sessionId}
-          onPlayerJoined={(newPlayer) => {
-            setGameState(prev => ({
-              ...prev,
-              players: [...prev.players.filter(p => p.name.toLowerCase() !== newPlayer.name.toLowerCase()), newPlayer]
-            }));
-          }}
-        />
-      )}
-      {screen === 'scoreboard' && (
-        <Scoreboard scores={{ players: gameState.players, teams: gameState.teams, mode: gameSettings?.mode || 'individual' }} rounds={scorecardRounds} timePerQ={gameSettings?.timePerQ || 30} onPlayAgain={handlePlayAgain} onNewSetup={handleNewSetup} onHome={() => navigate('home')} isDark={isDark} onToggleTheme={toggleTheme} onFeedback={() => setShowFeedback(true)} />
-      )}
+      <div className="tv-stage-wrapper">
+        <div className="tv-stage-container">
+          {screen === 'loading' && <LoadingScreen onComplete={() => { screenRef.current = 'home'; setScreen('home'); window.history.replaceState({ screen: 'home' }, '', window.location.href); }} />}
+          {screen === 'home' && <HomeScreen
+            onNavigate={(s) => {
+              if (s === 'admin') {
+                if (isAdmin) { navigate('admin'); } else { navigate('admin-login'); }
+              } else {
+                navigate(s);
+              }
+            }}
+            stats={{ total: content.length, games: gameStats.gamesPlayed }}
+            isDark={isDark}
+            onToggleTheme={toggleTheme}
+          />}
+          {screen === 'admin-login' && <AdminLogin
+            onLoginSuccess={() => { setIsAdmin(true); navigate('admin'); }}
+            onBack={() => navigate('home')}
+          />}
+          {screen === 'admin' && <AdminScreen
+            content={content}
+            questionTypes={questionTypes}
+            onRefresh={refreshContent}
+            onRefreshTypes={refreshQuestionTypes}
+            onBack={() => navigate('home')}
+            isDark={isDark}
+            onToggleTheme={toggleTheme}
+            onLogout={handleLogout}
+            adminEmail={adminEmail}
+          />}
+          {screen === 'setup' && <GameSetup questionTypes={questionTypes} onBack={() => navigate('home')} onStart={handleStartGame} isDark={isDark} onToggleTheme={toggleTheme} />}
+          {screen === 'lobby' && gameSettings && (
+            <GameLobby
+              settings={gameSettings}
+              onStart={() => navigateToScreen('playing')}
+              onBack={() => navigate('setup')}
+              isDark={isDark}
+              onToggleTheme={toggleTheme}
+              onUpdatePlayers={(updated) => setGameState(prev => ({ ...prev, players: updated }))}
+            />
+          )}
+          {screen === 'playing' && gameState.currentQuestion && (
+            <GamePlay
+              question={gameState.currentQuestion}
+              roundNumber={gameState.currentIdx + 1}
+              totalRounds={gameState.questions.length}
+              onNext={handleNext}
+              onExit={() => setShowExitConfirm(true)}
+              players={gameState.players}
+              teams={gameState.teams}
+              mode={gameSettings?.mode || 'individual'}
+              sessionId={gameSettings?.sessionId}
+              onPlayerJoined={(newPlayer) => {
+                setGameState(prev => ({
+                  ...prev,
+                  players: [...prev.players.filter(p => p.name.toLowerCase() !== newPlayer.name.toLowerCase()), newPlayer]
+                }));
+              }}
+            />
+          )}
+          {screen === 'scoreboard' && (
+            <Scoreboard scores={{ players: gameState.players, teams: gameState.teams, mode: gameSettings?.mode || 'individual' }} rounds={scorecardRounds} timePerQ={gameSettings?.timePerQ || 30} onPlayAgain={handlePlayAgain} onNewSetup={handleNewSetup} onHome={() => navigate('home')} isDark={isDark} onToggleTheme={toggleTheme} onFeedback={() => setShowFeedback(true)} />
+          )}
+        </div>
+      </div>
 
       {fetchError && (
         <div className="fixed bottom-20 left-4 right-4 z-50 p-4 rounded-xl bg-red-500/20 border border-red-500/30 text-red-200 text-sm flex justify-between items-center" style={{ backdropFilter: 'blur(8px)' }}>
