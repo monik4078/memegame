@@ -258,7 +258,7 @@ export const MobileBuzzerView: React.FC<MobileBuzzerViewProps> = ({
       <div className="w-full max-w-md mx-auto my-auto py-6 relative z-10 flex flex-col items-center justify-center">
         {!isJoined ? (
           /* Step 1: Enter Player Name */
-          <form onSubmit={handleJoin} className="w-full bg-slate-900/90 border border-white/10 p-6 rounded-3xl backdrop-blur-xl shadow-2xl space-y-4 animate-fadeIn">
+          <form onSubmit={handleJoin} className="w-full bg-slate-900/90 border border-white/10 p-6 rounded-3xl backdrop-blur-xl shadow-2xl space-y-4 animate-page-enter">
             <div className="text-center">
               <div className="text-4xl mb-2">👋</div>
               <h2 className="text-xl font-bold text-white">Join Game Session</h2>
@@ -296,8 +296,8 @@ export const MobileBuzzerView: React.FC<MobileBuzzerViewProps> = ({
           </form>
         ) : sessionStatus === 'ended' ? (
           /* Game Session Ended Lockout */
-          <div className="w-full bg-slate-900/90 border border-white/10 p-8 rounded-3xl text-center space-y-4 backdrop-blur-xl animate-fadeIn shadow-2xl">
-            <div className="text-6xl mb-2">🏁</div>
+          <div className="w-full bg-slate-900/90 border border-white/10 p-8 rounded-3xl text-center space-y-4 backdrop-blur-xl animate-page-enter shadow-2xl">
+            <div className="text-6xl mb-2 animate-bounce">🏁</div>
             <h2 className="text-2xl font-black text-white">Game Over!</h2>
             <p className="text-sm text-white/60">
               This game session has completed. Thank you for playing!
@@ -307,15 +307,20 @@ export const MobileBuzzerView: React.FC<MobileBuzzerViewProps> = ({
             </div>
           </div>
         ) : (
-          /* Step 2: The Buzzer Screen with PERMANENT NAME LOCK */
-          <div className="w-full flex flex-col items-center gap-6 animate-fadeIn">
-            {/* Permanent Locked Player Name Badge */}
-            <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-purple-500/20 border border-purple-500/40 text-xs shadow-md">
-              <span className="text-purple-300 font-medium">Playing as:</span>
-              <span className="font-extrabold text-white">{playerName}</span>
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-500/30 text-purple-200 font-semibold border border-purple-400/30">
-                Locked 🔒
+          /* Step 2: The Buzzer Screen with PERMANENT NAME LOCK and Smooth Question Transition */
+          <div key={`buzzer-q-${currentQuestionIndex}`} className="w-full flex flex-col items-center gap-5 animate-page-enter">
+            {/* Question Indicator & Player Badge */}
+            <div className="flex items-center gap-2 flex-wrap justify-center">
+              <span className="text-[11px] px-3 py-1 rounded-full bg-cyan-500/20 border border-cyan-500/40 text-cyan-200 font-bold animate-round-badge">
+                ⚡ Question #{currentQuestionIndex + 1}
               </span>
+              <div className="flex items-center gap-2 px-3.5 py-1 rounded-full bg-purple-500/20 border border-purple-500/40 text-xs shadow-md">
+                <span className="text-purple-300 font-medium">Playing as:</span>
+                <span className="font-extrabold text-white">{playerName}</span>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-500/30 text-purple-200 font-semibold border border-purple-400/30">
+                  Locked 🔒
+                </span>
+              </div>
             </div>
 
             {/* Giant BUZZER Button */}
@@ -323,10 +328,10 @@ export const MobileBuzzerView: React.FC<MobileBuzzerViewProps> = ({
               type="button"
               disabled={hasBuzzed || sessionStatus === 'ended'}
               onClick={handleBuzz}
-              className={`w-64 h-64 sm:w-72 sm:h-72 rounded-full flex flex-col items-center justify-center transition-all duration-200 select-none cursor-pointer ${
+              className={`w-64 h-64 sm:w-72 sm:h-72 rounded-full flex flex-col items-center justify-center transition-all duration-300 select-none cursor-pointer ${
                 hasBuzzed
-                  ? 'bg-gradient-to-br from-green-500 to-emerald-700 shadow-[0_0_50px_rgba(34,197,94,0.5)] scale-95 opacity-90'
-                  : 'bg-gradient-to-br from-red-500 via-rose-600 to-red-700 hover:from-red-400 hover:to-red-600 active:scale-90 shadow-[0_0_60px_rgba(239,68,68,0.6)] animate-pulse'
+                  ? 'bg-gradient-to-br from-green-500 to-emerald-700 shadow-[0_0_50px_rgba(34,197,94,0.5)] scale-95 opacity-90 animate-reveal-pop'
+                  : 'bg-gradient-to-br from-red-500 via-rose-600 to-red-700 hover:from-red-400 hover:to-red-600 active:scale-90 shadow-[0_0_60px_rgba(239,68,68,0.6)] animate-buzzer-halo animate-pulse'
               }`}
               style={{
                 border: hasBuzzed ? '8px solid #86efac' : '8px solid #fca5a5',
@@ -334,7 +339,7 @@ export const MobileBuzzerView: React.FC<MobileBuzzerViewProps> = ({
             >
               {hasBuzzed ? (
                 <div className="flex flex-col items-center text-center p-4">
-                  <span className="text-5xl mb-1">⚡</span>
+                  <span className="text-5xl mb-1 animate-bounce">⚡</span>
                   <span className="text-2xl font-black tracking-wider text-white">BUZZED!</span>
                   <span className="text-xs font-semibold text-green-200 mt-2 bg-black/30 px-3 py-1 rounded-full">
                     {buzzRank ? `#${buzzRank} to Buzz` : 'Recorded ⏱️'}
@@ -355,11 +360,11 @@ export const MobileBuzzerView: React.FC<MobileBuzzerViewProps> = ({
             {/* Status Instructions */}
             <div className="text-center space-y-1">
               {hasBuzzed ? (
-                <div className="p-3 rounded-2xl bg-green-500/10 border border-green-500/20 text-green-300 text-xs font-semibold max-w-xs">
+                <div className="p-3 rounded-2xl bg-green-500/10 border border-green-500/20 text-green-300 text-xs font-semibold max-w-xs animate-reveal-pop">
                   ✅ Buzzer pressed for this question! Locked until next question.
                 </div>
               ) : (
-                <p className="text-xs text-white/50 font-medium">
+                <p className="text-xs text-white/60 font-medium">
                   Press as fast as you can when the question appears!
                 </p>
               )}

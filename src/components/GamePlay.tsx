@@ -126,11 +126,11 @@ const GamePlay: React.FC = () => {
         </div>
 
         {/* Question Card */}
-        <div className="game-card p-6 lg:p-10 mb-6 animate-scaleIn shadow-xl">
+        <div key={`question-${content.id}`} className="game-card p-6 lg:p-10 mb-6 animate-question-card shadow-2xl glass-card-interactive">
           {/* Image if available */}
           {content.imageUrl && content.imageUrl !== '' && (
-            <div className="mb-6 rounded-xl overflow-hidden bg-white/5 flex items-center justify-center min-h-[220px]">
-              <img src={content.imageUrl} alt="Meme" className="max-w-full max-h-[350px] lg:max-h-[500px] object-contain" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; (e.target as HTMLImageElement).parentElement!.innerHTML = '<span class="text-6xl opacity-30">🖼️</span>'; }} />
+            <div className="mb-6 rounded-xl overflow-hidden bg-white/5 flex items-center justify-center min-h-[220px] animate-media-zoom">
+              <img src={content.imageUrl} alt="Meme" className="max-w-full max-h-[350px] lg:max-h-[500px] object-contain transition-transform duration-300 hover:scale-[1.02]" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; (e.target as HTMLImageElement).parentElement!.innerHTML = '<span class="text-6xl opacity-30">🖼️</span>'; }} />
             </div>
           )}
 
@@ -184,9 +184,10 @@ const GamePlay: React.FC = () => {
             return (
               <button
                 key={`${content.id}-opt-${idx}`}
-                className={`p-4 rounded-xl text-left transition-all duration-300 ${
+                style={{ animationDelay: `${idx * 60 + 60}ms` }}
+                className={`animate-option-cascade p-4 rounded-xl text-left transition-all duration-300 ${
                   isAnswer
-                    ? 'bg-gradient-to-r from-neon-green/30 to-emerald-600/30 border-2 border-neon-green shadow-lg shadow-neon-green/10'
+                    ? 'bg-gradient-to-r from-neon-green/30 to-emerald-600/30 border-2 border-neon-green shadow-lg shadow-neon-green/10 scale-[1.01]'
                     : isWrong
                     ? 'bg-red-500/20 border-2 border-neon-red opacity-70'
                     : hasAnswered
